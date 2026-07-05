@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function buildLayout(count: number, cols: number): number[] {
   const rows: number[] = [];
@@ -11,7 +11,7 @@ function buildLayout(count: number, cols: number): number[] {
     if (placed < count && r % 3 === 0) {
       let b = (a + 2) % cols;
       if (b === a) b = (a + 1) % cols;
-      row[b] = placed++;
+      if (row[b] === -1) row[b] = placed++;
     }
     rows.push(...row);
     r++;
@@ -19,18 +19,10 @@ function buildLayout(count: number, cols: number): number[] {
   return rows;
 }
 
-function useCols() {
-  const ref = useRef(4);
-  useEffect(() => {
-    const compute = () => {
-      const w = window.innerWidth;
-      ref.current = w < 640 ? 2 : w < 1024 ? 3 : 4;
-    };
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
-  return ref;
+function getCols() {
+  if (typeof window === "undefined") return 4;
+  const w = window.innerWidth;
+  return w < 640 ? 2 : w < 1024 ? 3 : 4;
 }
 
 export function ScatteredGrid({
@@ -40,19 +32,15 @@ export function ScatteredGrid({
   items: number;
   render: (index: number) => React.ReactNode;
 }) {
-  const colsRef = useCols();
-  const [cols, setCols] = useMemoState(4);
-
+  const [cols, setCols] = useState(4);
   useEffect(() => {
-    const upd = () => setCols(window.innerWidth < 640 ? 2 : window.innerWidth < 1024 ? 3 : 4);
+    const upd = () => setCols(getCols());
     upd();
     window.addEventListener("resize", upd);
     return () => window.removeEventListener("resize", upd);
-  }, [setCols]);
+  }, []);
 
   const layout = useMemo(() => buildLayout(items, cols), [items, cols]);
-  colsRef.current = cols;
-
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,12 +50,10 @@ export function ScatteredGrid({
       const cards = containerRef.current?.querySelectorAll<HTMLElement>(".bp-card") ?? [];
       cards.forEach((el) => {
         const rect = el.getBoundingClientRect();
-        const top = rect.top;
-        const bottom = rect.bottom;
         let scale = 0;
-        if (bottom > 0 && top < vh) {
-          const enter = Math.min(1, (vh - top) / (vh * 0.6));
-          const exit = Math.min(1, bottom / (vh * 0.4));
+        if (rect.bottom > 0 && rect.top < vh) {
+          const enter = Math.min(1, (vh - rect.top) / (vh * 0.6));
+          const exit = Math.min(1, rect.bottom / (vh * 0.4));
           scale = Math.max(0, Math.min(enter, exit));
         }
         el.style.transform = `scale(${scale})`;
@@ -79,7 +65,11 @@ export function ScatteredGrid({
   }, []);
 
   return (
-    <div ref={containerRef} className="w-full grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+    <div
+      ref={containerRef}
+      className="w-full grid"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
       {layout.map((idx, i) => {
         const col = i % cols;
         const origin = col < cols / 2 ? "right bottom" : "left bottom";
@@ -97,19 +87,3 @@ export function ScatteredGrid({
     </div>
   );
 }
-
-function useMemoState<T>(initial: T): [T, (v: T) => void] {
-  const ref = useRef(initial);
-  const forceRef = useRef<(n: number) => void>(() => {});
-  const [, setN] = useReactState(0);
-  forceRef.current = setN;
-  const set = (v: T) => {
-    if (ref.current !== v) {
-      ref.current = v;
-      forceRef.current(Math.random());
-    }
-  };
-  return [ref.current, set];
-}
-
-import { useState as useReactState } from "react";
