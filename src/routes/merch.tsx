@@ -97,7 +97,7 @@ function MerchPage() {
                 </div>
                 <div>
                   <div className="text-lg sm:text-xl uppercase tracking-[-0.03em] leading-tight">{item.name}</div>
-                  <div className="mt-3 inline-flex items-center gap-2 text-[10px] uppercase tracking-widest border border-current/30 px-3 py-1 rounded-full opacity-80">
+                  <div className={`mt-3 inline-flex items-center gap-2 text-[10px] uppercase tracking-widest border ${dark ? "border-white/30" : "border-black/30"} px-3 py-1 rounded-full opacity-80`}>
                     {item.status}
                   </div>
                 </div>
