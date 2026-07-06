@@ -28,17 +28,19 @@ const LINES = [
 
 function ManifestoPage() {
   return (
-    <div className="min-h-screen bg-black text-white font-tight relative overflow-hidden">
+    <div className="min-h-screen bg-black text-white font-tight relative overflow-x-hidden">
       <FixedLogo />
       <FixedNav />
 
-      <div className="px-4 lg:px-12 pt-[220px] lg:pt-[280px] pb-[200px] max-w-[1400px]">
-        <div className="text-white/50 text-xs uppercase tracking-[0.2em] mb-16">Manifesto / 2026</div>
-        <div className="space-y-10">
+      <div className="px-4 lg:px-12 pt-[160px] sm:pt-[220px] lg:pt-[280px] pb-[160px] sm:pb-[200px] max-w-[1400px]">
+        <div className="flex items-center gap-3 text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.2em] mb-10 sm:mb-16">
+          <ArrowUpRight size={14} strokeWidth={1.75} /> Manifesto / 2026
+        </div>
+        <div className="space-y-6 sm:space-y-10">
           {LINES.map((line, i) => (
             <p
               key={i}
-              className="text-[36px] sm:text-[56px] lg:text-[84px] leading-[0.95] tracking-[-0.04em]"
+              className="text-[28px] sm:text-[52px] lg:text-[84px] leading-[0.95] tracking-[-0.04em]"
             >
               {line}
             </p>
@@ -46,9 +48,9 @@ function ManifestoPage() {
         </div>
         <Link
           to="/dashboard"
-          className="mt-24 inline-flex items-center gap-3 bg-white text-black px-8 py-5 rounded-full text-lg uppercase tracking-widest"
+          className="mt-16 sm:mt-24 inline-flex items-center gap-3 bg-white text-black px-6 sm:px-8 py-4 sm:py-5 rounded-full text-sm sm:text-lg uppercase tracking-widest"
         >
-          Open dashboard <ArrowUpRight size={20} strokeWidth={2} />
+          Open dashboard <ArrowUpRight size={18} strokeWidth={1.75} />
         </Link>
       </div>
 
