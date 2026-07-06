@@ -108,3 +108,7 @@
 .mix-exclusion {
   mix-blend-mode: exclusion;
 }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
