@@ -39,7 +39,7 @@ export function FixedNav() {
           <Menu size={24} strokeWidth={2.5} className="lg:hidden" />
         </button>
         <Link to="/merch" className="font-tight text-[13px] lg:text-[15px] uppercase inline-flex items-center gap-1">
-          <ShoppingBag size={16} strokeWidth={2} className="hidden lg:inline" /> [ CART ]
+          <ShoppingBag size={16} strokeWidth={2} className="hidden lg:inline" /> [ MERCH ]
         </Link>
       </div>
     </motion.nav>
