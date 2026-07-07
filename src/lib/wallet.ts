@@ -12,14 +12,18 @@ export type WalletSession = {
   email?: string;
   uaAddress: string;
   sraAddress?: string;
-  didToken?: string;
-  devMode?: boolean;
+  didToken: string;
 };
 
 const SESSION_KEY = "axis_wallet_session";
 
 function createMagic(): Magic {
-  const magicKey = import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY!;
+  const magicKey = import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY;
+  if (!magicKey) {
+    throw new Error(
+      "Wallet not configured. Add VITE_MAGIC_PUBLISHABLE_KEY — see docs/KEYS_SETUP.md",
+    );
+  }
   return new Magic(magicKey, {
     extensions: [new OAuthExtension()],
     network: { rpcUrl: "https://arb1.arbitrum.io/rpc", chainId: 42161 },
@@ -30,7 +34,11 @@ export function getStoredSession(): WalletSession | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as WalletSession) : null;
+    const session = raw ? (JSON.parse(raw) as WalletSession) : null;
+    if (session && session.userId && session.uaAddress && session.didToken) {
+      return session;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -53,43 +61,63 @@ export function isWalletConfigured(): boolean {
   );
 }
 
-/**
- * Google login via Magic Labs.
- * Falls back to dev session when keys are not configured.
- */
-export async function loginWithGoogle(): Promise<WalletSession> {
-  const magicKey = import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY;
-
-  if (!magicKey) {
-    const devSession: WalletSession = {
-      userId: `dev-${crypto.randomUUID().slice(0, 8)}`,
-      email: "demo@axis.app",
-      uaAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
-      sraAddress: "0x7a3f9c4bE0Fa27a3Ba91cC48DdEf9c14e70b8dC91",
-      devMode: true,
-    };
-    storeSession(devSession);
-    return devSession;
+/** Start Google OAuth — redirects away from the app */
+export async function loginWithGoogle(): Promise<never> {
+  const magic = createMagic();
+  const loggedIn = await magic.user.isLoggedIn();
+  if (loggedIn) {
+    await finalizeSession(magic);
+    return undefined as never;
   }
+  await magic.oauth2.loginWithRedirect({ provider: "google" });
+  throw new Error("Redirecting to Google sign-in…");
+}
+
+/** Complete OAuth after redirect return */
+export async function handleOAuthRedirect(): Promise<WalletSession | null> {
+  if (!import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY) return null;
 
   const magic = createMagic();
-  await magic.oauth2.loginWithRedirect({ provider: "google" });
+  try {
+    await magic.oauth2.getRedirectResult();
+    if (!(await magic.user.isLoggedIn())) return null;
+    return finalizeSession(magic);
+  } catch {
+    return null;
+  }
+}
 
+/** Resume session if already logged in with Magic */
+export async function resumeSession(): Promise<WalletSession | null> {
+  if (!import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY) return null;
+  const magic = createMagic();
+  if (!(await magic.user.isLoggedIn())) return null;
+  return finalizeSession(magic);
+}
+
+async function finalizeSession(magic: Magic): Promise<WalletSession> {
   const didToken = await magic.user.getIdToken();
   const info = await magic.user.getInfo();
   const metadata = await magic.user.getMetadata();
 
   let uaAddress = metadata.publicAddress ?? "";
-  let sraAddress: string | undefined;
+  if (!uaAddress) {
+    throw new Error("Wallet address unavailable. Complete Magic wallet setup.");
+  }
 
-  if (import.meta.env.VITE_PARTICLE_PROJECT_ID) {
-    try {
-      const ua = await upgradeToUniversalAccount(magic);
-      uaAddress = ua.address;
-      sraAddress = await createSmartRoutingAddress(uaAddress);
-    } catch (err) {
-      console.warn("UA upgrade failed, using Magic EOA:", err);
-    }
+  if (!import.meta.env.VITE_PARTICLE_PROJECT_ID) {
+    throw new Error("Particle Network not configured. Add VITE_PARTICLE_* keys.");
+  }
+
+  const ua = await upgradeToUniversalAccount(magic);
+  uaAddress = ua.address;
+  const sraAddress = await createSmartRoutingAddress(uaAddress);
+
+  if (!import.meta.env.VITE_ZERODEV_PROJECT_ID) {
+    throw new Error("ZeroDev not configured. Add VITE_ZERODEV_PROJECT_ID for SRA deposits.");
+  }
+  if (!sraAddress) {
+    throw new Error("Failed to create Smart Routing Address.");
   }
 
   const auth = await axisApi.register(didToken, uaAddress, sraAddress);
@@ -103,21 +131,6 @@ export async function loginWithGoogle(): Promise<WalletSession> {
   };
   storeSession(session);
   return session;
-}
-
-/** Handle Magic OAuth redirect callback */
-export async function handleOAuthRedirect(): Promise<WalletSession | null> {
-  const magicKey = import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY;
-  if (!magicKey) return null;
-
-  const magic = createMagic();
-  try {
-    const result = await magic.oauth2.getRedirectResult();
-    if (!result) return null;
-    return loginWithGoogle();
-  } catch {
-    return null;
-  }
 }
 
 async function upgradeToUniversalAccount(magic: Magic) {
@@ -141,37 +154,29 @@ async function upgradeToUniversalAccount(magic: Magic) {
 }
 
 async function createSmartRoutingAddress(owner: string): Promise<string | undefined> {
-  if (!import.meta.env.VITE_ZERODEV_PROJECT_ID) return undefined;
+  const { createSmartRoutingAddress } = await import("@zerodev/smart-routing-address");
+  const { arbitrum, optimism, base, mainnet } = await import("viem/chains");
 
-  try {
-    const { createSmartRoutingAddress } = await import("@zerodev/smart-routing-address");
-    const { arbitrum, optimism, base, mainnet } = await import("viem/chains");
-
-    const { smartRoutingAddress } = await createSmartRoutingAddress({
-      owner,
-      destChain: arbitrum,
-      srcTokens: [
-        { tokenType: "USDC", chain: optimism },
-        { tokenType: "USDC", chain: base },
-        { tokenType: "USDC", chain: arbitrum },
-        { tokenType: "NATIVE", chain: mainnet },
-      ],
-      actions: {
-        USDC: { action: [], fallBack: [] },
-        NATIVE: { action: [], fallBack: [] },
-      },
-      slippage: 50,
-    });
-    return smartRoutingAddress;
-  } catch (err) {
-    console.warn("SRA creation failed:", err);
-    return undefined;
-  }
+  const { smartRoutingAddress } = await createSmartRoutingAddress({
+    owner,
+    destChain: arbitrum,
+    srcTokens: [
+      { tokenType: "USDC", chain: optimism },
+      { tokenType: "USDC", chain: base },
+      { tokenType: "USDC", chain: arbitrum },
+      { tokenType: "NATIVE", chain: mainnet },
+    ],
+    actions: {
+      USDC: { action: [], fallBack: [] },
+      NATIVE: { action: [], fallBack: [] },
+    },
+    slippage: 50,
+  });
+  return smartRoutingAddress;
 }
 
 export async function logout(): Promise<void> {
-  const magicKey = import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY;
-  if (magicKey) {
+  if (import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY) {
     try {
       const magic = createMagic();
       await magic.user.logout();

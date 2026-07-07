@@ -11,6 +11,7 @@ const LINKS = [
   { to: "/agent", label: "The Agent", icon: Sparkles },
   { to: "/vault", label: "Vault", icon: Layers },
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { to: "/proof", label: "Proof", icon: FileText },
   { to: "/merch", label: "Merch — Soon", icon: ShoppingBag },
 ] as const;
 

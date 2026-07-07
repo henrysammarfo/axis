@@ -3,7 +3,13 @@ import { useState } from "react";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { Logo } from "../components/brand/Logo";
 import { Mail, Check, Package, Timer } from "lucide-react";
-import { MERCH } from "../lib/brandData";
+
+const MERCH = [
+  { id: "m1", name: "AXIS Wordmark Hoodie", drop: "Q1", status: "Coming Soon" },
+  { id: "m2", name: "Set. Forget. Earn. Tee", drop: "Q1", status: "Waitlist" },
+  { id: "m3", name: "Circled R Cap", drop: "Q2", status: "Coming Soon" },
+  { id: "m4", name: "Archive Zip", drop: "Q2", status: "Preview" },
+] as const;
 
 export const Route = createFileRoute("/merch")({
   head: () => ({

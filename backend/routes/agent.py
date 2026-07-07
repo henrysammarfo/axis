@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from dependencies import require_auth
 from services.ai_agent import AxisAgent
 from services.defi_executor import DeFiExecutor
 from services.portfolio_tracker import PortfolioTracker
@@ -29,7 +30,13 @@ class RebalanceRequest(BaseModel):
 
 
 @router.post("/activate")
-async def activate_axis(request: ActivateRequest, db: AsyncSession = Depends(get_db)):
+async def activate_axis(
+    request: ActivateRequest,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    if request.user_id != auth_user_id:
+        raise HTTPException(status_code=403, detail="User ID does not match authenticated session")
     tracker = PortfolioTracker(db)
     await tracker.activate_user(
         user_id=request.user_id,
@@ -64,7 +71,13 @@ async def activate_axis(request: ActivateRequest, db: AsyncSession = Depends(get
 
 
 @router.post("/rebalance")
-async def manual_rebalance(request: RebalanceRequest, db: AsyncSession = Depends(get_db)):
+async def manual_rebalance(
+    request: RebalanceRequest,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    if request.user_id != auth_user_id:
+        raise HTTPException(status_code=403, detail="User ID does not match authenticated session")
     tracker = PortfolioTracker(db)
     user = await tracker.get_user(request.user_id)
     budget = user.budget_usdc if user else 0
@@ -89,7 +102,13 @@ async def manual_rebalance(request: RebalanceRequest, db: AsyncSession = Depends
 
 
 @router.get("/report/{user_id}")
-async def get_weekly_report(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_weekly_report(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    if user_id != auth_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     tracker = PortfolioTracker(db)
     defi = DeFiExecutor("")
     x402 = X402Client("", db)
@@ -99,7 +118,13 @@ async def get_weekly_report(user_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/status/{user_id}")
-async def get_agent_status(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_agent_status(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    if user_id != auth_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     tracker = PortfolioTracker(db)
     summary = await tracker.get_summary(user_id)
     x402 = X402Client(summary.get("ua_address") or "", db)

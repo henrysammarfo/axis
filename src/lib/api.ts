@@ -1,5 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+import { getStoredSession } from "./wallet";
+import type { ActionEntry } from "./portfolio";
+
 export type AgentStatus = {
   active: boolean;
   positions: Array<{
@@ -31,17 +34,31 @@ export type ConfigStatus = {
   intelligence: { tinyfish: boolean; x402_wallet: boolean };
 };
 
+function authHeaders(): Record<string, string> {
+  const session = getStoredSession();
+  if (!session?.didToken) return {};
+  return { Authorization: `Bearer ${session.didToken}` };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
       ...init?.headers,
     },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? `API error ${res.status}`);
+    const detail = err.detail;
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail[0]?.msg
+          : `API error ${res.status}`,
+    );
   }
   return res.json() as Promise<T>;
 }
@@ -95,6 +112,9 @@ export const axisApi = {
 
   report: (userId: string) =>
     request<{ report: string; user_id: string }>(`/api/agent/report/${userId}`),
+
+  history: (userId: string) =>
+    request<{ actions: ActionEntry[] }>(`/api/portfolio/history/${userId}`),
 
   yields: {
     aave: (asset: string) =>

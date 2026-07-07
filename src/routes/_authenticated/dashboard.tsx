@@ -2,9 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { useMemo, useEffect, useRef, useState } from "react";
-import { FixedFooter } from "../components/brand/FixedChrome";
-import { MobileMenu } from "../components/brand/MobileMenu";
-import { Logo } from "../components/brand/Logo";
+import { FixedFooter } from "../../components/brand/FixedChrome";
+import { MobileMenu } from "../../components/brand/MobileMenu";
+import { Logo } from "../../components/brand/Logo";
 import {
   Wallet,
   Sparkles,
@@ -25,11 +25,24 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-import { VAULTS, AGENT_FEED, ORDERS, MERCH, summary, type Chain } from "../lib/brandData";
-import { getStoredSession } from "../lib/wallet";
-import { truncateAddress } from "../lib/api";
-import { useActivateAxis, useAxisReport, useAxisStatus, useRebalanceAxis } from "../hooks/useAxis";
+import { Route as AuthenticatedRoute } from "../_authenticated";
+import {
+  actionsToAgentFeed,
+  actionsToOrders,
+  chainAllocations,
+  portfolioSummary,
+  positionsToVaults,
+} from "../../lib/portfolio";
+import {
+  useActivateAxis,
+  useAxisHistory,
+  useAxisReport,
+  useAxisStatus,
+  useRebalanceAxis,
+} from "../../hooks/useAxis";
 import { toast } from "sonner";
+
+import { truncateAddress } from "../../lib/api";
 
 const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
 const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
@@ -42,7 +55,7 @@ const dashSearch = z.object({
   goal: z.string().optional(),
 });
 
-export const Route = createFileRoute("/dashboard")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   validateSearch: zodValidator(dashSearch),
   head: () => ({
     meta: [
@@ -58,9 +71,12 @@ export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
 });
 
-const SRA_FALLBACK = "0x7a3f9c4bE0Fa27a3Ba91cC48DdEf9c14e70b8dC91";
 const ICON = { size: 16, strokeWidth: 1.75 } as const;
 const CHAINS: (Chain | "All")[] = ["All", "Arbitrum", "Base", "Optimism", "Ethereum"];
+
+function EmptyState({ message }: { message: string }) {
+  return <div className="p-10 text-center text-white/40 text-sm">{message}</div>;
+}
 
 function Sparkline() {
   const pts = [8, 12, 10, 16, 18, 14, 22, 24, 20, 28, 32, 30, 36, 40];
@@ -93,12 +109,13 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
 ];
 
 function Dashboard() {
+  const { session } = AuthenticatedRoute.useRouteContext();
   const { tab, chain, activate, budget: budgetParam, risk, goal } = Route.useSearch();
   const navigate = useNavigate({ from: "/dashboard" });
-  const session = getStoredSession();
-  const userId = session?.userId;
-  const { data: axisStatus } = useAxisStatus(userId);
+  const userId = session.userId;
+  const { data: axisStatus, isLoading } = useAxisStatus(userId);
   const { data: axisReport } = useAxisReport(userId);
+  const { data: historyData } = useAxisHistory(userId);
   const activateMutation = useActivateAxis();
   const rebalanceMutation = useRebalanceAxis();
   const activatedRef = useRef(false);
@@ -108,11 +125,11 @@ function Dashboard() {
   const [rebalanceText, setRebalanceText] = useState("");
   const [activating, setActivating] = useState(false);
 
-  const sra = axisStatus?.sra_address ?? session?.sraAddress ?? SRA_FALLBACK;
-  const uaDisplay = axisStatus?.ua_address ?? session?.uaAddress ?? "0x7a3f…dC91";
+  const sra = axisStatus?.sra_address ?? session.sraAddress;
+  const uaDisplay = axisStatus?.ua_address ?? session.uaAddress;
 
   useEffect(() => {
-    if (activate === "1" && userId && session?.uaAddress && !activatedRef.current) {
+    if (activate === "1" && userId && session.uaAddress && !activatedRef.current) {
       activatedRef.current = true;
       setActivating(true);
       activateMutation
@@ -153,24 +170,35 @@ function Dashboard() {
       replace: true,
     });
 
-  const s = useMemo(() => summary(), []);
+  const actions = historyData?.actions ?? [];
+  const positions = axisStatus?.positions ?? [];
+  const s = portfolioSummary(axisStatus);
+  const vaultRows = positionsToVaults(positions);
+  const agentFeed = actionsToAgentFeed(actions);
+  const orders = actionsToOrders(actions);
+  const chains = chainAllocations(positions);
+
   const filteredVaults = useMemo(
-    () => (chain === "All" ? VAULTS : VAULTS.filter((v) => v.chain === chain)),
-    [chain],
+    () => (chain === "All" ? vaultRows : vaultRows.filter((v) => v.chain === chain)),
+    [vaultRows, chain],
   );
   const filteredOrders = useMemo(
-    () => (chain === "All" ? ORDERS : ORDERS.filter((o) => o.chain === chain)),
-    [chain],
+    () => (chain === "All" ? orders : orders.filter((o) => o.chain === chain)),
+    [orders, chain],
   );
 
+  const totalBalance = s.totalAllocated;
+  const weeklyYield = s.weeklyYield;
+
   const copy = () => {
+    if (!sra) return;
     navigator.clipboard.writeText(sra).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
   const onRebalance = async () => {
-    if (!rebalanceText.trim() || !userId || !session?.uaAddress) return;
+    if (!rebalanceText.trim() || !userId || !session.uaAddress) return;
     try {
       const res = await rebalanceMutation.mutateAsync({
         user_id: userId,
@@ -186,18 +214,15 @@ function Dashboard() {
     }
   };
 
-  const livePositions = axisStatus?.positions ?? [];
-  const totalBalance = axisStatus?.total_invested_usdc ?? s.totalAllocated;
-  const weeklyYield = axisStatus?.estimated_weekly_yield_usdc ?? 23.14;
-  const agentFeed = livePositions.length
-    ? livePositions.map((p, i) => ({
-        id: `live-${i}`,
-        time: "now",
-        kind: "rebalance" as const,
-        message: `${p.protocol}: $${p.amount_usdc} at ${p.estimated_apy}% APY`,
-        amount: (p.amount_usdc * p.estimated_apy) / 100 / 52,
-      }))
-    : AGENT_FEED;
+  const livePositions = positions;
+
+  if (isLoading && !axisStatus) {
+    return (
+      <div className="min-h-screen bg-black text-white font-tight grid place-items-center">
+        <p className="text-sm uppercase tracking-widest text-white/50">Loading portfolio…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white font-tight pb-20 lg:pb-0">
@@ -320,38 +345,32 @@ function Dashboard() {
 
               {/* Chain allocation summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-                {(["Arbitrum", "Base", "Optimism"] as Chain[]).map((c) => {
-                  const rows = VAULTS.filter((v) => v.chain === c);
-                  const alloc = rows.reduce((a, v) => a + v.allocated, 0);
-                  const wapy =
-                    alloc > 0 ? rows.reduce((a, v) => a + v.apy * v.allocated, 0) / alloc : 0;
-                  return (
-                    <div
-                      key={c}
-                      className="border border-white/10 p-5 sm:p-6 flex flex-col justify-between min-h-[160px]"
-                    >
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                        <span className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 truncate">
-                          {c}
-                        </span>
-                        <CircleDot
-                          size={14}
-                          strokeWidth={1.75}
-                          className="text-[color:var(--color-lime)] shrink-0"
-                        />
+                {chains.map(({ chain: c, alloc, count, wapy }) => (
+                  <div
+                    key={c}
+                    className="border border-white/10 p-5 sm:p-6 flex flex-col justify-between min-h-[160px]"
+                  >
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                      <span className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 truncate">
+                        {c}
+                      </span>
+                      <CircleDot
+                        size={14}
+                        strokeWidth={1.75}
+                        className="text-[color:var(--color-lime)] shrink-0"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-3xl sm:text-4xl tracking-[-0.04em]">
+                        ${alloc.toLocaleString()}
                       </div>
-                      <div>
-                        <div className="text-3xl sm:text-4xl tracking-[-0.04em]">
-                          ${alloc.toLocaleString()}
-                        </div>
-                        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-[10px] sm:text-xs uppercase text-white/50 tracking-widest">
-                          <span className="truncate">{rows.length} positions</span>
-                          <span className="shrink-0">APY {wapy.toFixed(1)}%</span>
-                        </div>
+                      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-[10px] sm:text-xs uppercase text-white/50 tracking-widest">
+                        <span className="truncate">{count} positions</span>
+                        <span className="shrink-0">APY {wapy.toFixed(1)}%</span>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
 
               {/* Agent + SRA */}
@@ -369,6 +388,9 @@ function Dashboard() {
                     </button>
                   </div>
                   <ul className="space-y-3">
+                    {agentFeed.length === 0 && (
+                      <li className="text-sm text-white/40">No agent activity yet.</li>
+                    )}
                     {agentFeed.slice(0, 5).map((f) => (
                       <li key={f.id} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-3 text-sm">
                         <span className="text-white/40 shrink-0">{f.time}</span>
@@ -388,20 +410,26 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="mt-5 bg-white/5 border border-white/10 rounded-md p-3 sm:p-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-                    <code className="text-[10px] sm:text-xs lg:text-sm break-all min-w-0">
-                      {sra}
-                    </code>
-                    <button
-                      onClick={copy}
-                      className="shrink-0 bg-white text-black rounded-full p-2"
-                      aria-label="Copy"
-                    >
-                      {copied ? (
-                        <Check size={14} strokeWidth={2} />
-                      ) : (
-                        <Copy size={14} strokeWidth={1.75} />
-                      )}
-                    </button>
+                    {sra ? (
+                      <>
+                        <code className="text-[10px] sm:text-xs lg:text-sm break-all min-w-0">
+                          {sra}
+                        </code>
+                        <button
+                          onClick={copy}
+                          className="shrink-0 bg-white text-black rounded-full p-2"
+                          aria-label="Copy"
+                        >
+                          {copied ? (
+                            <Check size={14} strokeWidth={2} />
+                          ) : (
+                            <Copy size={14} strokeWidth={1.75} />
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-sm text-white/40">Deposit address loading…</span>
+                    )}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2 text-[9px] sm:text-[10px] uppercase tracking-widest text-white/50">
                     {(["Arbitrum", "Base", "Optimism", "Ethereum"] as Chain[]).map((c) => (
@@ -483,7 +511,7 @@ function Dashboard() {
                 {filteredVaults.map((v) => (
                   <div
                     key={v.id}
-                    className="grid grid-cols-[1fr_auto] sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 sm:gap-4 items-center px-4 sm:px-6 py-4 border-b border-white/10 last:border-b-0"
+                    className="grid grid-cols-[1fr_auto] sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-3 sm:gap-4 items-center px-4 sm:px-6 py-4 border-b border-white/10 last:border-b-0"
                   >
                     <div className="min-w-0">
                       <div className="text-sm sm:text-base uppercase tracking-[-0.03em] truncate">
@@ -491,21 +519,15 @@ function Dashboard() {
                       </div>
                       <div className="mt-1 flex flex-wrap gap-2 text-[9px] sm:text-[10px] uppercase text-white/50 tracking-widest">
                         <span className="border border-white/20 px-2 py-0.5">{v.chain}</span>
-                        <span className="border border-white/20 px-2 py-0.5">{v.risk}</span>
+                        <span className="border border-white/20 px-2 py-0.5">{v.protocol}</span>
                       </div>
-                    </div>
-                    <div className="hidden sm:block text-xs uppercase tracking-widest text-white/60">
-                      TVL ${(v.tvl / 1_000_000).toFixed(2)}M
                     </div>
                     <div className="hidden sm:block text-xs uppercase tracking-widest text-white/60">
                       Alloc ${v.allocated.toLocaleString()}
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-2xl sm:text-3xl tracking-[-0.04em] text-[color:var(--color-lime)]">
-                        {v.apy}%
-                      </div>
-                      <div className="text-[9px] uppercase tracking-widest text-white/50 mt-0.5">
-                        {v.status}
+                        {v.apy.toFixed(1)}%
                       </div>
                     </div>
                   </div>
@@ -530,7 +552,12 @@ function Dashboard() {
                 </span>
               </div>
               <ul>
-                {AGENT_FEED.map((f) => (
+                {agentFeed.length === 0 && (
+                  <li className="px-4 sm:px-6 py-10 text-center text-white/40 text-sm">
+                    No agent history yet. Activate AXIS to get started.
+                  </li>
+                )}
+                {agentFeed.map((f) => (
                   <li
                     key={f.id}
                     className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-start gap-3 px-4 sm:px-6 py-4 border-b border-white/10 last:border-b-0"
@@ -613,28 +640,6 @@ function Dashboard() {
               </div>
               <div className="text-3xl sm:text-5xl tracking-[-0.04em] max-w-[26ch] leading-[0.95]">
                 Merch unlocks when AXIS hits $10M under management.
-              </div>
-              <div className="mt-4 text-sm text-white/60 max-w-[52ch]">
-                Every deposit brings the first drop closer. Pieces will be reserved for holders and
-                waitlist first — see the merch page to join.
-              </div>
-              <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {MERCH.slice(0, 6).map((m, i) => (
-                  <div
-                    key={m.id}
-                    className="border border-white/10 p-4 min-h-[140px] flex flex-col justify-between"
-                  >
-                    <span className="text-[10px] uppercase tracking-widest text-white/40">
-                      {String(i + 1).padStart(2, "0")} / {m.drop}
-                    </span>
-                    <div>
-                      <div className="text-sm uppercase tracking-[-0.03em] truncate">{m.name}</div>
-                      <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">
-                        {m.status}
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
               <Link
                 to="/merch"

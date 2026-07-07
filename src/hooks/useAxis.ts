@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axisApi } from "../lib/api";
 import { getStoredSession } from "../lib/wallet";
 
@@ -30,6 +30,19 @@ export function useAxisReport(userId: string | undefined) {
   });
 }
 
+export function useAxisHistory(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["axis", "history", userId],
+    queryFn: () => axisApi.history(userId!),
+    enabled: Boolean(userId),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useSession() {
+  return getStoredSession();
+}
+
 export function useActivateAxis() {
   const qc = useQueryClient();
   return useMutation({
@@ -37,6 +50,7 @@ export function useActivateAxis() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "report", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
     },
   });
 }
@@ -48,10 +62,7 @@ export function useRebalanceAxis() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "report", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
     },
   });
-}
-
-export function useSession() {
-  return getStoredSession();
 }

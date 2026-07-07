@@ -1,9 +1,10 @@
 """Portfolio and position routes."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from dependencies import require_auth
 from services.portfolio_tracker import PortfolioTracker
 from services.yield_fetcher import YieldFetcher
 
@@ -11,13 +12,25 @@ router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
 @router.get("/positions/{user_id}")
-async def get_positions(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_positions(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    if user_id != auth_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     tracker = PortfolioTracker(db)
     return {"positions": await tracker.get_positions(user_id)}
 
 
 @router.get("/history/{user_id}")
-async def get_history(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_history(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    if user_id != auth_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     tracker = PortfolioTracker(db)
     return {"actions": await tracker.get_weekly_actions(user_id)}
 

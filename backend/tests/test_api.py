@@ -2,6 +2,8 @@
 
 import pytest
 
+AUTH = {"Authorization": "Bearer test-did-token"}
+
 
 @pytest.mark.asyncio
 async def test_health(client):
@@ -22,7 +24,7 @@ async def test_config_status(client):
 
 
 @pytest.mark.asyncio
-async def test_activate_rules_engine(client):
+async def test_activate_requires_auth(client):
     r = await client.post(
         "/api/agent/activate",
         json={
@@ -33,49 +35,43 @@ async def test_activate_rules_engine(client):
             "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
         },
     )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_activate_with_auth(client, monkeypatch):
+    async def mock_run(self, **kwargs):
+        return {
+            "actions": [{"tool": "check_aave_yield", "input": {}, "result": {"supply_apy": 4.2}}],
+            "explanation": "Test allocation complete.",
+            "user_id": kwargs["user_id"],
+            "budget_usdc": kwargs["budget_usdc"],
+            "provider": "venice",
+        }
+
+    monkeypatch.setattr("routes.agent.AxisAgent.run", mock_run)
+
+    r = await client.post(
+        "/api/agent/activate",
+        headers=AUTH,
+        json={
+            "user_id": "test-user",
+            "budget_usdc": 500,
+            "risk_level": "moderate",
+            "goal": "maximize yield",
+            "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        },
+    )
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "activated"
     assert "explanation" in data
-    assert data["actions_taken"] >= 1
 
 
 @pytest.mark.asyncio
-async def test_agent_status_after_activate(client):
-    user_id = "test-user-2"
-    await client.post(
-        "/api/agent/activate",
-        json={
-            "user_id": user_id,
-            "budget_usdc": 300,
-            "risk_level": "conservative",
-            "goal": "protect capital",
-            "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
-        },
-    )
-    r = await client.get(f"/api/agent/status/{user_id}")
-    assert r.status_code == 200
-    data = r.json()
-    assert data["active"] is True
-    assert len(data["positions"]) >= 1
-
-
-@pytest.mark.asyncio
-async def test_weekly_report(client):
-    user_id = "test-user-3"
-    await client.post(
-        "/api/agent/activate",
-        json={
-            "user_id": user_id,
-            "budget_usdc": 200,
-            "risk_level": "moderate",
-            "goal": "steady yield",
-            "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
-        },
-    )
-    r = await client.get(f"/api/agent/report/{user_id}")
-    assert r.status_code == 200
-    assert "report" in r.json()
+async def test_agent_status_requires_auth(client):
+    r = await client.get("/api/agent/status/test-user")
+    assert r.status_code == 401
 
 
 @pytest.mark.asyncio

@@ -64,23 +64,22 @@ class DeFiExecutor:
                     "gas_paid_by_user": False,
                     "timestamp": int(time.time()),
                 }
+            return {
+                "success": False,
+                "error": tx_result.get("error", "On-chain execution failed"),
+                "protocol": protocol,
+                "asset": asset,
+                "amount_usdc": amount_usdc,
+                "action": action,
+            }
 
-        # Simulation mode when wallet keys not configured
         return {
-            "success": True,
-            "simulated": True,
+            "success": False,
+            "error": "Wallet infrastructure not configured. Set Magic, Particle, and ZeroDev keys.",
             "protocol": protocol,
             "asset": asset,
             "amount_usdc": amount_usdc,
             "action": action,
-            "tx_hash": None,
-            "chain": "arbitrum",
-            "estimated_daily_yield_usdc": round(daily_yield, 4),
-            "estimated_apy": estimated_apy,
-            "executed_via": "simulation",
-            "gas_paid_by_user": False,
-            "timestamp": int(time.time()),
-            "note": "Configure Magic + Particle + ZeroDev keys for live on-chain execution",
         }
 
     async def _estimate_apy(self, protocol: str, asset: str) -> float:

@@ -52,7 +52,9 @@ class AxisAgent:
     ) -> dict[str, Any]:
         provider = self.settings.ai_provider
         if provider == "rules":
-            return await self._rules_engine(user_id, budget_usdc, risk_level, goal)
+            raise RuntimeError(
+                "No AI provider configured. Set VENICE_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY."
+            )
 
         if provider in ("venice", "openai"):
             return await self._openai_compatible_loop(user_id, budget_usdc, risk_level, goal, provider)
@@ -74,6 +76,8 @@ Actions this week: {json.dumps(history)}"""
             return await self._chat_completion(prompt, provider, max_tokens=300)
         if provider == "anthropic":
             return await self._anthropic_completion(prompt, max_tokens=300)
+        positions = await self.tracker.get_positions(user_id)
+        history = await self.tracker.get_weekly_actions(user_id)
         return self._template_report(positions, history)
 
     async def _openai_compatible_loop(

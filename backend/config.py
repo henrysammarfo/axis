@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     port: int = 8000
     frontend_url: str = "http://localhost:3000"
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
-    environment: Literal["development", "staging", "production"] = "development"
+    environment: Literal["development", "staging", "production", "testing"] = "development"
     rate_limit_per_minute: int = 30
     max_x402_spend_usdc_per_day: float = 0.10
 

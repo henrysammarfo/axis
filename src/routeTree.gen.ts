@@ -10,22 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VaultRouteImport } from './routes/vault'
-import { Route as ProofRouteImport } from './routes/proof'
 import { Route as OnboardRouteImport } from './routes/onboard'
 import { Route as MerchRouteImport } from './routes/merch'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AgentRouteImport } from './routes/agent'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedProofRouteImport } from './routes/_authenticated/proof'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 
 const VaultRoute = VaultRouteImport.update({
   id: '/vault',
   path: '/vault',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProofRoute = ProofRouteImport.update({
-  id: '/proof',
-  path: '/proof',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardRoute = OnboardRouteImport.update({
@@ -43,14 +39,13 @@ const ManifestoRoute = ManifestoRouteImport.update({
   path: '/manifesto',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AgentRoute = AgentRouteImport.update({
   id: '/agent',
   path: '/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -58,79 +53,90 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedProofRoute = AuthenticatedProofRouteImport.update({
+  id: '/proof',
+  path: '/proof',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent': typeof AgentRoute
-  '/dashboard': typeof DashboardRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
-  '/proof': typeof ProofRoute
   '/vault': typeof VaultRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/proof': typeof AuthenticatedProofRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent': typeof AgentRoute
-  '/dashboard': typeof DashboardRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
-  '/proof': typeof ProofRoute
   '/vault': typeof VaultRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/proof': typeof AuthenticatedProofRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/agent': typeof AgentRoute
-  '/dashboard': typeof DashboardRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
-  '/proof': typeof ProofRoute
   '/vault': typeof VaultRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/proof': typeof AuthenticatedProofRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/agent'
-    | '/dashboard'
     | '/manifesto'
     | '/merch'
     | '/onboard'
-    | '/proof'
     | '/vault'
+    | '/dashboard'
+    | '/proof'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/agent'
-    | '/dashboard'
     | '/manifesto'
     | '/merch'
     | '/onboard'
-    | '/proof'
     | '/vault'
+    | '/dashboard'
+    | '/proof'
   id:
     | '__root__'
     | '/'
+    | '/_authenticated'
     | '/agent'
-    | '/dashboard'
     | '/manifesto'
     | '/merch'
     | '/onboard'
-    | '/proof'
     | '/vault'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/proof'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AgentRoute: typeof AgentRoute
-  DashboardRoute: typeof DashboardRoute
   ManifestoRoute: typeof ManifestoRoute
   MerchRoute: typeof MerchRoute
   OnboardRoute: typeof OnboardRoute
-  ProofRoute: typeof ProofRoute
   VaultRoute: typeof VaultRoute
 }
 
@@ -141,13 +147,6 @@ declare module '@tanstack/react-router' {
       path: '/vault'
       fullPath: '/vault'
       preLoaderRoute: typeof VaultRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/proof': {
-      id: '/proof'
-      path: '/proof'
-      fullPath: '/proof'
-      preLoaderRoute: typeof ProofRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboard': {
@@ -171,18 +170,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManifestoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/agent': {
       id: '/agent'
       path: '/agent'
       fullPath: '/agent'
       preLoaderRoute: typeof AgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -192,17 +191,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/proof': {
+      id: '/_authenticated/proof'
+      path: '/proof'
+      fullPath: '/proof'
+      preLoaderRoute: typeof AuthenticatedProofRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedProofRoute: typeof AuthenticatedProofRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedProofRoute: AuthenticatedProofRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AgentRoute: AgentRoute,
-  DashboardRoute: DashboardRoute,
   ManifestoRoute: ManifestoRoute,
   MerchRoute: MerchRoute,
   OnboardRoute: OnboardRoute,
-  ProofRoute: ProofRoute,
   VaultRoute: VaultRoute,
 }
 export const routeTree = rootRouteImport

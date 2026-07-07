@@ -91,7 +91,7 @@ class PortfolioTracker:
                     estimated_apy=float(result.get("estimated_apy", 0)),
                     tx_hash=result.get("tx_hash"),
                     chain=result.get("chain", "arbitrum"),
-                    status="open" if not result.get("simulated") else "simulated",
+                    status="open",
                 )
             )
         await self.db.flush()
@@ -99,7 +99,7 @@ class PortfolioTracker:
     async def get_positions(self, user_id: str) -> list[dict[str, Any]]:
         result = await self.db.execute(
             select(Position)
-            .where(Position.user_id == user_id, Position.status.in_(["open", "simulated"]))
+            .where(Position.user_id == user_id, Position.status == "open")
             .order_by(Position.opened_at.desc())
         )
         positions = result.scalars().all()

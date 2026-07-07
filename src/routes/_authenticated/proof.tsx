@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useAxisConfig } from "../hooks/useAxis";
-import { getStoredSession } from "../lib/wallet";
+import { Route as AuthenticatedRoute } from "../_authenticated";
+import { useAxisConfig } from "../../hooks/useAxis";
 
-export const Route = createFileRoute("/proof")({
+export const Route = createFileRoute("/_authenticated/proof")({
   head: () => ({
     meta: [
       { title: "Judge Proof — AXIS" },
@@ -17,8 +17,8 @@ export const Route = createFileRoute("/proof")({
 });
 
 function Proof() {
+  const { session } = AuthenticatedRoute.useRouteContext();
   const { data: config } = useAxisConfig();
-  const session = getStoredSession();
 
   const checks = [
     { label: "Magic embedded wallet", ok: config?.wallet.magic },
@@ -57,27 +57,20 @@ function Proof() {
         </ul>
       </section>
 
-      {session && (
-        <section className="mt-6 border border-white/10 p-6 text-sm space-y-2">
-          <h2 className="text-xs uppercase tracking-widest text-white/50 mb-3">Session evidence</h2>
+      <section className="mt-6 border border-white/10 p-6 text-sm space-y-2">
+        <h2 className="text-xs uppercase tracking-widest text-white/50 mb-3">Session evidence</h2>
+        <p>
+          <span className="text-white/40">User ID:</span> {session.userId}
+        </p>
+        <p>
+          <span className="text-white/40">UA address:</span> {session.uaAddress}
+        </p>
+        {session.sraAddress && (
           <p>
-            <span className="text-white/40">User ID:</span> {session.userId}
+            <span className="text-white/40">SRA address:</span> {session.sraAddress}
           </p>
-          <p>
-            <span className="text-white/40">UA address:</span> {session.uaAddress}
-          </p>
-          {session.sraAddress && (
-            <p>
-              <span className="text-white/40">SRA address:</span> {session.sraAddress}
-            </p>
-          )}
-          {session.devMode && (
-            <p className="text-yellow-400/80 text-xs mt-2">
-              Dev mode — configure wallet keys for live on-chain proof
-            </p>
-          )}
-        </section>
-      )}
+        )}
+      </section>
 
       <section className="mt-6 border border-white/10 p-6 text-sm text-white/70 leading-relaxed">
         <h2 className="text-xs uppercase tracking-widest text-white/50 mb-3">Demo flow</h2>
@@ -99,10 +92,6 @@ function Proof() {
           <li>Deposit via SRA from any chain</li>
         </ol>
       </section>
-
-      <p className="mt-8 text-[10px] uppercase tracking-widest text-white/30">
-        API docs: /docs · Health: /health · Keys: docs/KEYS_SETUP.md
-      </p>
     </div>
   );
 }

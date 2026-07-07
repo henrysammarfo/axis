@@ -1,14 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { Filter, Shield, TrendingUp, Activity, Layers, ArrowUpRight } from "lucide-react";
-import { VAULTS, type Chain, type Risk } from "../lib/brandData";
+import { axisApi } from "../lib/api";
 
 export const Route = createFileRoute("/vault")({
   head: () => ({
     meta: [
       { title: "Vault — AXIS Strategies" },
-      { name: "description", content: "Ten strategies the AXIS agent executes across chains." },
+      { name: "description", content: "Live DeFi yields AXIS monitors on Arbitrum." },
       { property: "og:title", content: "Vault — AXIS" },
       { property: "og:description", content: "The strategy archive." },
     ],
@@ -16,23 +17,41 @@ export const Route = createFileRoute("/vault")({
   component: VaultPage,
 });
 
+type Chain = "Arbitrum" | "Base" | "Optimism";
+type Risk = "Low" | "Med" | "High";
+
 const CHAINS: (Chain | "All")[] = ["All", "Arbitrum", "Base", "Optimism"];
 const RISKS: (Risk | "All")[] = ["All", "Low", "Med", "High"];
 const RISK_ICON = { Low: Shield, Med: Activity, High: TrendingUp };
+
+const STRATEGIES = [
+  { id: "aave-usdc", name: "Aave USDC Supply", chain: "Arbitrum" as Chain, risk: "Low" as Risk, protocol: "aave", asset: "USDC" },
+  { id: "aave-eth", name: "Aave ETH Supply", chain: "Arbitrum" as Chain, risk: "Low" as Risk, protocol: "aave", asset: "ETH" },
+  { id: "gmx-glp", name: "GMX GLP", chain: "Arbitrum" as Chain, risk: "Med" as Risk, protocol: "gmx", asset: "GLP" },
+] as const;
 
 function VaultPage() {
   const [chain, setChain] = useState<Chain | "All">("All");
   const [risk, setRisk] = useState<Risk | "All">("All");
 
+  const { data: aaveUsdc } = useQuery({ queryKey: ["yield", "aave", "USDC"], queryFn: () => axisApi.yields.aave("USDC") });
+  const { data: aaveEth } = useQuery({ queryKey: ["yield", "aave", "ETH"], queryFn: () => axisApi.yields.aave("ETH") });
+  const { data: gmx } = useQuery({ queryKey: ["yield", "gmx"], queryFn: () => axisApi.yields.gmx });
+
+  const apyMap: Record<string, number> = {
+    "aave-usdc": Number(aaveUsdc?.supply_apy ?? 0),
+    "aave-eth": Number(aaveEth?.supply_apy ?? 0),
+    "gmx-glp": Number(gmx?.apy ?? 0),
+  };
+
   const items = useMemo(
     () =>
-      VAULTS.filter(
+      STRATEGIES.filter(
         (v) => (chain === "All" || v.chain === chain) && (risk === "All" || v.risk === risk),
-      ),
-    [chain, risk],
+      ).map((v) => ({ ...v, apy: apyMap[v.id] ?? 0 })),
+    [chain, risk, aaveUsdc, aaveEth, gmx],
   );
 
-  const totalTVL = items.reduce((s, v) => s + v.tvl, 0);
   const avgApy = items.length ? items.reduce((s, v) => s + v.apy, 0) / items.length : 0;
 
   return (
@@ -40,99 +59,73 @@ function VaultPage() {
       <FixedLogo />
       <FixedNav />
 
-      <div className="pt-[160px] sm:pt-[200px] lg:pt-[240px] px-4 lg:px-12">
-        <div className="flex items-center gap-3 text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.2em] mb-6 sm:mb-8">
-          <Layers size={14} strokeWidth={1.75} /> Vault / Archive
-        </div>
-        <h1 className="text-[44px] sm:text-[80px] lg:text-[160px] leading-[0.88] tracking-[-0.05em]">
-          Ten strategies.<br />One agent.
+      <div className="pt-[160px] sm:pt-[200px] lg:pt-[240px] px-4 lg:px-12 pb-32">
+        <p className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-white/50 mb-4">
+          Live yields · Arbitrum
+        </p>
+        <h1 className="text-[48px] sm:text-[72px] lg:text-[96px] leading-[0.9] tracking-[-0.05em] max-w-[14ch]">
+          Strategy vault
         </h1>
-      </div>
+        <p className="mt-6 text-sm text-white/60 max-w-[52ch]">
+          Real APY data from Aave v3 and GMX on Arbitrum. AXIS allocates your budget across these
+          protocols automatically.
+        </p>
 
-      {/* Filters + summary */}
-      <div className="mt-16 lg:mt-24 px-4 lg:px-12 flex flex-col gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/50">
-            <Filter size={13} strokeWidth={1.75} /> Chain
-          </div>
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {CHAINS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setChain(c)}
-                className={`shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-widest rounded-full border ${
-                  chain === c ? "bg-white text-black border-white" : "border-white/20 text-white/70"
-                }`}
-              >{c}</button>
-            ))}
-          </div>
-          <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/50 sm:ml-6">
-            <Shield size={13} strokeWidth={1.75} /> Risk
-          </div>
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {RISKS.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRisk(r)}
-                className={`shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-widest rounded-full border ${
-                  risk === r ? "bg-white text-black border-white" : "border-white/20 text-white/70"
-                }`}
-              >{r}</button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-px bg-white/10 border border-white/10">
-          <SummaryCell label="Strategies" value={`${items.length}`} />
-          <SummaryCell label="TVL" value={`$${(totalTVL / 1_000_000).toFixed(1)}M`} />
-          <SummaryCell label="Avg APY" value={`${avgApy.toFixed(1)}%`} accent />
-        </div>
-      </div>
-
-      {/* Grid */}
-      <div className="mt-12 lg:mt-16 px-4 lg:px-12 pb-[160px] sm:pb-[220px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {items.map((s, i) => {
-          const Ico = RISK_ICON[s.risk];
-          return (
-            <Link
-              key={s.id}
-              to="/dashboard"
-              className="group bg-white/5 border border-white/10 p-5 sm:p-6 lg:p-8 flex flex-col justify-between min-h-[220px] sm:min-h-[260px] hover:bg-white/10 transition-colors"
+        <div className="mt-10 flex flex-wrap gap-2">
+          {CHAINS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setChain(c)}
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest rounded-full border ${
+                chain === c ? "bg-white text-black border-white" : "border-white/20 text-white/70"
+              }`}
             >
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
-                <span className="text-[10px] uppercase text-white/50 tracking-widest truncate">
-                  {String(i + 1).padStart(2, "0")} · {s.chain}
-                </span>
-                <Ico size={16} strokeWidth={1.75} className="text-[color:var(--color-lime)] shrink-0" />
-              </div>
-              <div className="mt-6">
-                <div className="text-xl sm:text-2xl lg:text-3xl uppercase tracking-[-0.04em] truncate">{s.name}</div>
-                <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-                  <span className="text-4xl sm:text-5xl lg:text-6xl tracking-[-0.05em]">{s.apy}%</span>
-                  <span className="text-[10px] uppercase text-white/60 tracking-widest shrink-0 pb-2">{s.risk}</span>
+              {c}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-12 border border-white/10">
+          <div className="px-4 sm:px-6 py-4 border-b border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-4 text-[10px] uppercase tracking-widest text-white/50">
+            <span>Avg APY {avgApy.toFixed(1)}%</span>
+            <span>{items.length} strategies</span>
+          </div>
+          {items.map((v) => {
+            const RiskIco = RISK_ICON[v.risk];
+            return (
+              <div
+                key={v.id}
+                className="grid grid-cols-[1fr_auto] sm:grid-cols-[minmax(0,2fr)_auto_auto] gap-4 items-center px-4 sm:px-6 py-5 border-b border-white/10 last:border-b-0"
+              >
+                <div>
+                  <div className="text-lg uppercase tracking-[-0.03em]">{v.name}</div>
+                  <div className="mt-2 flex gap-2 text-[9px] uppercase tracking-widest text-white/50">
+                    <span className="border border-white/20 px-2 py-0.5">{v.chain}</span>
+                    <span className="border border-white/20 px-2 py-0.5 inline-flex items-center gap-1">
+                      <RiskIco size={10} /> {v.risk}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-[10px] uppercase text-white/40 tracking-widest">
-                  <span className="truncate">TVL ${(s.tvl / 1_000_000).toFixed(2)}M</span>
-                  <span className="shrink-0 inline-flex items-center gap-1">
-                    Open <ArrowUpRight size={12} strokeWidth={1.75} />
-                  </span>
+                <div className="hidden sm:flex items-center gap-2 text-white/40 text-xs uppercase tracking-widest">
+                  <Layers size={14} /> {v.protocol}
+                </div>
+                <div className="text-3xl tracking-[-0.04em] text-[color:var(--color-lime)]">
+                  {v.apy > 0 ? `${v.apy.toFixed(1)}%` : "—"}
                 </div>
               </div>
-            </Link>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        <Link
+          to="/onboard"
+          className="mt-12 inline-flex items-center gap-2 bg-white text-black rounded-full px-6 py-3 text-xs uppercase tracking-widest"
+        >
+          Activate AXIS <ArrowUpRight size={14} strokeWidth={1.75} />
+        </Link>
       </div>
 
       <FixedFooter />
-    </div>
-  );
-}
-
-function SummaryCell({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="bg-black p-4 sm:p-5">
-      <div className="text-[9px] sm:text-[10px] uppercase tracking-widest text-white/50">{label}</div>
-      <div className={`mt-1 text-lg sm:text-2xl tracking-[-0.04em] ${accent ? "text-[color:var(--color-lime)]" : ""}`}>{value}</div>
     </div>
   );
 }

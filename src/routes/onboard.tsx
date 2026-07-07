@@ -1,15 +1,22 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Logo } from "../components/brand/Logo";
 import {
   loginWithGoogle,
   handleOAuthRedirect,
+  resumeSession,
   getStoredSession,
   isWalletConfigured,
 } from "../lib/wallet";
 import { useAxisConfig } from "../hooks/useAxis";
+import { isAuthenticated } from "../lib/auth";
 
 export const Route = createFileRoute("/onboard")({
+  beforeLoad: () => {
+    if (isAuthenticated()) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Get Started — AXIS" },
@@ -37,20 +44,34 @@ function Onboard() {
   const session = getStoredSession();
 
   useEffect(() => {
-    handleOAuthRedirect().then((s) => {
-      if (s) setStep(2);
-    });
-    if (getStoredSession()) setStep(2);
+    handleOAuthRedirect()
+      .then((s) => {
+        if (s) setStep(2);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Login failed"));
+
+    resumeSession()
+      .then((s) => {
+        if (s) setStep(2);
+      })
+      .catch(() => {});
   }, []);
 
   const onLogin = async () => {
     setLoading(true);
     setError(null);
     try {
+      const existing = await resumeSession();
+      if (existing) {
+        setStep(2);
+        return;
+      }
       await loginWithGoogle();
-      setStep(2);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Login failed");
+      const msg = e instanceof Error ? e.message : "Login failed";
+      if (!msg.includes("Redirecting")) {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -90,8 +111,8 @@ function Onboard() {
 
               {!isWalletConfigured() && (
                 <div className="border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-yellow-200/80">
-                  Wallet keys not configured yet. Dev mode will use a demo account. See{" "}
-                  <code className="text-xs">docs/KEYS_SETUP.md</code> for setup steps.
+                  Configure wallet keys before signing in. See{" "}
+                  <code className="text-xs">docs/KEYS_SETUP.md</code>
                 </div>
               )}
 
