@@ -3,6 +3,7 @@ import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { useMemo, useState } from "react";
 import { FixedFooter } from "../components/brand/FixedChrome";
+import { MobileMenu } from "../components/brand/MobileMenu";
 import { Logo } from "../components/brand/Logo";
 import {
   Wallet, Sparkles, TrendingUp, ArrowUpRight, Copy, Check,
@@ -69,9 +70,10 @@ function Dashboard() {
   const [budget, setBudget] = useState(500);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const setTab = (t: Tab) => navigate({ search: (p) => ({ ...p, tab: t }), replace: true });
+  const setTab = (t: Tab) =>
+    navigate({ search: (p: { tab: Tab; chain: Chain | "All" }) => ({ ...p, tab: t }), replace: true });
   const setChain = (c: Chain | "All") =>
-    navigate({ search: (p) => ({ ...p, chain: c }), replace: true });
+    navigate({ search: (p: { tab: Tab; chain: Chain | "All" }) => ({ ...p, chain: c }), replace: true });
 
   const s = useMemo(() => summary(), []);
   const filteredVaults = useMemo(
