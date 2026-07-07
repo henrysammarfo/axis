@@ -63,10 +63,15 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
 ];
 
 function Dashboard() {
+  const { tab, chain } = Route.useSearch();
+  const navigate = useNavigate({ from: "/dashboard" });
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
-  const [tab, setTab] = useState<Tab>("overview");
-  const [chain, setChain] = useState<Chain | "All">("All");
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const setTab = (t: Tab) => navigate({ search: (p) => ({ ...p, tab: t }), replace: true });
+  const setChain = (c: Chain | "All") =>
+    navigate({ search: (p) => ({ ...p, chain: c }), replace: true });
 
   const s = useMemo(() => summary(), []);
   const filteredVaults = useMemo(
@@ -85,11 +90,11 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white font-tight">
+    <div className="min-h-screen bg-black text-white font-tight pb-20 lg:pb-0">
       {/* Top bar */}
       <div className="fixed top-0 left-0 right-0 z-30 bg-black/85 backdrop-blur-md border-b border-white/10">
         <div className="flex items-center justify-between px-4 lg:px-8 h-16">
-          <Link to="/" className="flex items-center gap-3 min-w-0">
+          <Link to="/" className="flex items-center gap-3 min-w-0" aria-label="AXIS home">
             <Logo width={72} />
             <span className="text-[10px] uppercase tracking-widest text-white/40 hidden sm:inline shrink-0">/ Portfolio v1</span>
           </Link>
@@ -98,10 +103,18 @@ function Dashboard() {
               <Wallet {...ICON} />
               0x7a3f…dC91
             </div>
-            <button aria-label="Menu" className="p-2"><Menu size={20} strokeWidth={1.75} /></button>
+            <button
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(true)}
+              className="min-h-11 min-w-11 grid place-items-center"
+            >
+              <Menu size={20} strokeWidth={1.75} />
+            </button>
           </div>
         </div>
       </div>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       {/* Mobile tab scroller */}
       <div className="fixed top-16 left-0 right-0 z-20 bg-black/85 backdrop-blur-md border-b border-white/10 lg:hidden">
