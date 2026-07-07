@@ -17,13 +17,22 @@ class AuthService:
         self.settings = get_settings()
 
     async def verify_magic_token(self, did_token: str) -> dict[str, Any]:
-        if self.settings.environment == "testing" and did_token == "test-did-token":
-            return {
-                "valid": True,
-                "issuer": "test-user",
-                "email": "test@axis.app",
-                "public_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        if self.settings.environment == "testing":
+            test_users = {
+                "test-did-token": {
+                    "issuer": "test-user",
+                    "email": "test@axis.app",
+                    "public_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+                },
+                "test-did-token-user-b": {
+                    "issuer": "test-user-b",
+                    "email": "userb@axis.app",
+                    "public_address": "0x1111111111111111111111111111111111111111",
+                },
             }
+            profile = test_users.get(did_token)
+            if profile:
+                return {"valid": True, **profile}
 
         if not self.settings.magic_secret_key:
             raise ValueError("MAGIC_SECRET_KEY required for authentication")

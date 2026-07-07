@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import ActionLog, Position, User
+from services.tenant_guard import assert_address_not_claimed, normalize_address
 
 
 class PortfolioTracker:
@@ -22,22 +23,25 @@ class PortfolioTracker:
         ua_address: str | None = None,
         sra_address: str | None = None,
     ) -> User:
+        if ua_address:
+            await assert_address_not_claimed(self, ua_address, user_id)
+
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if user:
             if email:
                 user.email = email
             if ua_address:
-                user.ua_address = ua_address
+                user.ua_address = normalize_address(ua_address)
             if sra_address:
-                user.sra_address = sra_address
+                user.sra_address = normalize_address(sra_address)
             return user
 
         user = User(
             id=user_id,
             email=email,
-            ua_address=ua_address,
-            sra_address=sra_address,
+            ua_address=normalize_address(ua_address),
+            sra_address=normalize_address(sra_address),
         )
         self.db.add(user)
         await self.db.flush()
@@ -52,14 +56,15 @@ class PortfolioTracker:
         ua_address: str,
         sra_address: str | None = None,
     ) -> User:
+        await assert_address_not_claimed(self, ua_address, user_id)
         user = await self.ensure_user(user_id, ua_address=ua_address, sra_address=sra_address)
         user.budget_usdc = budget_usdc
         user.risk_level = risk_level
         user.goal = goal
-        user.ua_address = ua_address
+        user.ua_address = normalize_address(ua_address)
         user.active = True
         if sra_address:
-            user.sra_address = sra_address
+            user.sra_address = normalize_address(sra_address)
         await self.db.flush()
         return user
 
@@ -71,6 +76,9 @@ class PortfolioTracker:
         result: dict,
         message: str | None = None,
     ) -> None:
+        if not user_id:
+            raise ValueError("user_id is required for action logging")
+
         self.db.add(
             ActionLog(
                 user_id=user_id,
@@ -138,6 +146,14 @@ class PortfolioTracker:
 
     async def get_user(self, user_id: str) -> User | None:
         result = await self.db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    async def get_user_by_ua_address(self, ua_address: str) -> User | None:
+        normalized = normalize_address(ua_address)
+        if not normalized:
+            return None
+
+        result = await self.db.execute(select(User).where(User.ua_address == normalized))
         return result.scalar_one_or_none()
 
     async def get_summary(self, user_id: str) -> dict[str, Any]:

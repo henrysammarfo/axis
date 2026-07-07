@@ -1,14 +1,16 @@
 """AXIS Agent API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from dependencies import require_auth
+from dependencies import require_auth, require_own_user
+from rate_limit import limiter
 from services.ai_agent import AxisAgent
 from services.defi_executor import DeFiExecutor
 from services.portfolio_tracker import PortfolioTracker
+from services.tenant_guard import assert_same_user, assert_wallet_belongs_to_user
 from services.x402_client import X402Client
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -30,33 +32,43 @@ class RebalanceRequest(BaseModel):
 
 
 @router.post("/activate")
+@limiter.limit("10/minute")
 async def activate_axis(
-    request: ActivateRequest,
+    request_body: ActivateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     auth_user_id: str = Depends(require_auth),
 ):
-    if request.user_id != auth_user_id:
-        raise HTTPException(status_code=403, detail="User ID does not match authenticated session")
+    assert_same_user(auth_user_id, request_body.user_id)
+
     tracker = PortfolioTracker(db)
-    await tracker.activate_user(
-        user_id=request.user_id,
-        budget_usdc=request.budget_usdc,
-        risk_level=request.risk_level,
-        goal=request.goal,
-        ua_address=request.ua_address,
-        sra_address=request.sra_address,
+    existing = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(
+        existing,
+        request_body.ua_address,
+        request_body.sra_address,
+        allow_first_bind=True,
     )
 
-    defi = DeFiExecutor(request.ua_address)
-    x402 = X402Client(request.ua_address, db)
+    await tracker.activate_user(
+        user_id=request_body.user_id,
+        budget_usdc=request_body.budget_usdc,
+        risk_level=request_body.risk_level,
+        goal=request_body.goal,
+        ua_address=request_body.ua_address,
+        sra_address=request_body.sra_address,
+    )
+
+    defi = DeFiExecutor(request_body.ua_address)
+    x402 = X402Client(request_body.ua_address, db)
     agent = AxisAgent(defi, x402, tracker)
 
     try:
         result = await agent.run(
-            user_id=request.user_id,
-            budget_usdc=request.budget_usdc,
-            risk_level=request.risk_level,
-            goal=request.goal,
+            user_id=request_body.user_id,
+            budget_usdc=request_body.budget_usdc,
+            risk_level=request_body.risk_level,
+            goal=request_body.goal,
         )
         return {
             "status": "activated",
@@ -71,26 +83,32 @@ async def activate_axis(
 
 
 @router.post("/rebalance")
+@limiter.limit("20/minute")
 async def manual_rebalance(
-    request: RebalanceRequest,
+    request_body: RebalanceRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     auth_user_id: str = Depends(require_auth),
 ):
-    if request.user_id != auth_user_id:
-        raise HTTPException(status_code=403, detail="User ID does not match authenticated session")
-    tracker = PortfolioTracker(db)
-    user = await tracker.get_user(request.user_id)
-    budget = user.budget_usdc if user else 0
+    assert_same_user(auth_user_id, request_body.user_id)
 
-    defi = DeFiExecutor(request.ua_address)
-    x402 = X402Client(request.ua_address, db)
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not registered")
+
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    budget = user.budget_usdc
+    defi = DeFiExecutor(request_body.ua_address)
+    x402 = X402Client(request_body.ua_address, db)
     agent = AxisAgent(defi, x402, tracker)
 
     result = await agent.run(
-        user_id=request.user_id,
+        user_id=request_body.user_id,
         budget_usdc=budget,
-        risk_level=user.risk_level if user else "moderate",
-        goal=request.instruction,
+        risk_level=user.risk_level,
+        goal=request_body.instruction,
     )
 
     return {
@@ -103,12 +121,9 @@ async def manual_rebalance(
 
 @router.get("/report/{user_id}")
 async def get_weekly_report(
-    user_id: str,
+    user_id: str = Depends(require_own_user),
     db: AsyncSession = Depends(get_db),
-    auth_user_id: str = Depends(require_auth),
 ):
-    if user_id != auth_user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
     tracker = PortfolioTracker(db)
     defi = DeFiExecutor("")
     x402 = X402Client("", db)
@@ -119,12 +134,9 @@ async def get_weekly_report(
 
 @router.get("/status/{user_id}")
 async def get_agent_status(
-    user_id: str,
+    user_id: str = Depends(require_own_user),
     db: AsyncSession = Depends(get_db),
-    auth_user_id: str = Depends(require_auth),
 ):
-    if user_id != auth_user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
     tracker = PortfolioTracker(db)
     summary = await tracker.get_summary(user_id)
     x402 = X402Client(summary.get("ua_address") or "", db)

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from config import get_settings
 from services.auth_service import AuthService
+from services.tenant_guard import assert_same_user
 
 
 async def require_auth(
@@ -23,8 +24,11 @@ async def require_auth(
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    if settings.environment == "testing" and token == "test-did-token":
-        return "test-user"
+    if settings.environment == "testing":
+        auth = AuthService()
+        result = await auth.verify_magic_token(token)
+        if result.get("valid"):
+            return auth.user_id_from_auth(result)
 
     auth = AuthService()
     result = await auth.verify_magic_token(token)
@@ -34,9 +38,10 @@ async def require_auth(
     return auth.user_id_from_auth(result)
 
 
-async def require_user_match(
+async def require_own_user(
     user_id: str,
-    auth_user_id: str = Header(default=None, alias="X-User-Id"),
+    auth_user_id: str = Depends(require_auth),
 ) -> str:
-    """Ensure path user_id matches authenticated user when header provided."""
+    """Path param user_id must match authenticated Magic issuer."""
+    assert_same_user(auth_user_id, user_id)
     return user_id

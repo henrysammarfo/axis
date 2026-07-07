@@ -42,6 +42,9 @@ class AxisAgent:
         self.defi = defi
         self.x402 = x402
         self.tracker = tracker
+        self._session_user_id: str | None = None
+        self._budget_usdc: float = 0.0
+        self._allocated_usdc: float = 0.0
 
     async def run(
         self,
@@ -50,6 +53,10 @@ class AxisAgent:
         risk_level: str,
         goal: str,
     ) -> dict[str, Any]:
+        self._session_user_id = user_id
+        self._budget_usdc = budget_usdc
+        self._allocated_usdc = 0.0
+
         provider = self.settings.ai_provider
         if provider == "rules":
             raise RuntimeError(
@@ -301,6 +308,10 @@ Actions this week: {json.dumps(history)}"""
         }
 
     async def _execute_tool(self, tool_name: str, tool_input: dict, user_id: str) -> dict:
+        session_user_id = self._session_user_id or user_id
+        if user_id != session_user_id:
+            return {"error": "Cross-user tool execution is not allowed"}
+
         if tool_name == "check_aave_yield":
             return await self.defi.get_aave_apy(tool_input["asset"])
         if tool_name == "check_gmx_apy":
@@ -314,17 +325,29 @@ Actions this week: {json.dumps(history)}"""
         if tool_name == "get_market_intelligence":
             return await self.x402.fetch_intelligence(tool_input["query"], user_id)
         if tool_name == "execute_allocation":
+            amount = float(tool_input["amount_usdc"])
+            remaining = self._budget_usdc - self._allocated_usdc
+            if amount <= 0:
+                return {"success": False, "error": "Allocation amount must be positive"}
+            if amount > remaining + 0.01:
+                return {
+                    "success": False,
+                    "error": f"Allocation exceeds remaining budget (${remaining:.2f} USDC left)",
+                }
+
             result = await self.defi.execute(
                 protocol=tool_input["protocol"],
                 asset=tool_input["asset"],
-                amount_usdc=tool_input["amount_usdc"],
+                amount_usdc=amount,
                 action=tool_input["action"],
-                user_id=user_id,
+                user_id=session_user_id,
             )
-            await self.tracker.log_action(user_id, tool_name, tool_input, result)
+            if result.get("success"):
+                self._allocated_usdc += amount
+            await self.tracker.log_action(session_user_id, tool_name, tool_input, result)
             return result
         if tool_name == "get_current_positions":
-            return {"positions": await self.tracker.get_positions(tool_input.get("user_id", user_id))}
+            return {"positions": await self.tracker.get_positions(session_user_id)}
         return {"error": f"Unknown tool: {tool_name}"}
 
     async def _chat_completion(self, prompt: str, provider: str, max_tokens: int = 300) -> str:

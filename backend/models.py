@@ -17,7 +17,7 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    ua_address: Mapped[str | None] = mapped_column(String(42), nullable=True, index=True)
+    ua_address: Mapped[str | None] = mapped_column(String(42), nullable=True, unique=True, index=True)
     sra_address: Mapped[str | None] = mapped_column(String(42), nullable=True)
     risk_level: Mapped[str] = mapped_column(String(32), default="moderate")
     goal: Mapped[str] = mapped_column(String(255), default="maximize yield")

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from services.auth_service import AuthService
 from services.portfolio_tracker import PortfolioTracker
+from services.tenant_guard import assert_address_not_claimed
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -45,6 +46,10 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
 
     user_id = auth.user_id_from_auth(result)
     tracker = PortfolioTracker(db)
+
+    if request.ua_address:
+        await assert_address_not_claimed(tracker, request.ua_address, user_id)
+
     user = await tracker.ensure_user(
         user_id=user_id,
         email=result.get("email"),

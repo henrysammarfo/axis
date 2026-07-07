@@ -57,12 +57,8 @@ AXIS_TOOLS = [
     },
     {
         "name": "get_current_positions",
-        "description": "Get current DeFi positions and their yields",
-        "input_schema": {
-            "type": "object",
-            "properties": {"user_id": {"type": "string"}},
-            "required": ["user_id"],
-        },
+        "description": "Get the authenticated user's current DeFi positions and yields",
+        "input_schema": {"type": "object", "properties": {}},
     },
 ]
 
