@@ -155,9 +155,11 @@ function Index() {
         transition={{ duration: 0.6, ease: EASE, delay: 0.3 }}
       >
         <div className="lg:pl-4 lg:pt-[126px] lg:max-w-[692px]">
-          Move your cursor across the frame. The archive responds to intent — left, right, or dead-center rest.
-          Each strategy AXIS runs is triggered the same way: a small signal, a decisive execution, no gas, no
-          confirmation modals.
+          AXIS is an autonomous DeFi agent. Sign in with Google, set a budget, name a
+          goal — AXIS routes capital across Arbitrum, Base, Optimism and Ethereum as
+          one balance. No seed phrases, no gas modals, no chain switching. Move your
+          cursor: every strategy triggers the same way — a small signal, a decisive
+          execution.
         </div>
       </motion.div>
 

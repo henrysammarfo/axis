@@ -1,6 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { zodValidator, fallback } from "@tanstack/zod-adapter";
+import { z } from "zod";
 import { useMemo, useState } from "react";
 import { FixedFooter } from "../components/brand/FixedChrome";
+import { MobileMenu } from "../components/brand/MobileMenu";
 import { Logo } from "../components/brand/Logo";
 import {
   Wallet, Sparkles, TrendingUp, ArrowUpRight, Copy, Check,
@@ -9,7 +12,15 @@ import {
 } from "lucide-react";
 import { VAULTS, AGENT_FEED, ORDERS, MERCH, summary, type Chain } from "../lib/brandData";
 
+const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
+const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
+const dashSearch = z.object({
+  tab: fallback(tabSchema, "overview").default("overview"),
+  chain: fallback(chainSchema, "All").default("All"),
+});
+
 export const Route = createFileRoute("/dashboard")({
+  validateSearch: zodValidator(dashSearch),
   head: () => ({
     meta: [
       { title: "Portfolio — AXIS" },
@@ -53,10 +64,16 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
 ];
 
 function Dashboard() {
+  const { tab, chain } = Route.useSearch();
+  const navigate = useNavigate({ from: "/dashboard" });
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
-  const [tab, setTab] = useState<Tab>("overview");
-  const [chain, setChain] = useState<Chain | "All">("All");
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const setTab = (t: Tab) =>
+    navigate({ search: (p: { tab: Tab; chain: Chain | "All" }) => ({ ...p, tab: t }), replace: true });
+  const setChain = (c: Chain | "All") =>
+    navigate({ search: (p: { tab: Tab; chain: Chain | "All" }) => ({ ...p, chain: c }), replace: true });
 
   const s = useMemo(() => summary(), []);
   const filteredVaults = useMemo(
@@ -75,11 +92,11 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white font-tight">
+    <div className="min-h-screen bg-black text-white font-tight pb-20 lg:pb-0">
       {/* Top bar */}
       <div className="fixed top-0 left-0 right-0 z-30 bg-black/85 backdrop-blur-md border-b border-white/10">
         <div className="flex items-center justify-between px-4 lg:px-8 h-16">
-          <Link to="/" className="flex items-center gap-3 min-w-0">
+          <Link to="/" className="flex items-center gap-3 min-w-0" aria-label="AXIS home">
             <Logo width={72} />
             <span className="text-[10px] uppercase tracking-widest text-white/40 hidden sm:inline shrink-0">/ Portfolio v1</span>
           </Link>
@@ -88,10 +105,18 @@ function Dashboard() {
               <Wallet {...ICON} />
               0x7a3f…dC91
             </div>
-            <button aria-label="Menu" className="p-2"><Menu size={20} strokeWidth={1.75} /></button>
+            <button
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(true)}
+              className="min-h-11 min-w-11 grid place-items-center"
+            >
+              <Menu size={20} strokeWidth={1.75} />
+            </button>
           </div>
         </div>
       </div>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       {/* Mobile tab scroller */}
       <div className="fixed top-16 left-0 right-0 z-20 bg-black/85 backdrop-blur-md border-b border-white/10 lg:hidden">
