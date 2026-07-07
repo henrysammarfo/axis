@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { zodValidator, fallback } from "@tanstack/zod-adapter";
+import { z } from "zod";
 import { useMemo, useState } from "react";
 import { FixedFooter } from "../components/brand/FixedChrome";
 import { Logo } from "../components/brand/Logo";
@@ -9,7 +11,15 @@ import {
 } from "lucide-react";
 import { VAULTS, AGENT_FEED, ORDERS, MERCH, summary, type Chain } from "../lib/brandData";
 
+const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
+const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
+const dashSearch = z.object({
+  tab: fallback(tabSchema, "overview").default("overview"),
+  chain: fallback(chainSchema, "All").default("All"),
+});
+
 export const Route = createFileRoute("/dashboard")({
+  validateSearch: zodValidator(dashSearch),
   head: () => ({
     meta: [
       { title: "Portfolio — AXIS" },
