@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { CustomCursor } from "../components/brand/CustomCursor";
 import { MobileBottomNav } from "../components/brand/MobileMenu";
+import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -116,6 +117,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <CustomCursor />
       <Outlet />
+      <Toaster theme="dark" />
       {showBottomNav && <MobileBottomNav />}
     </QueryClientProvider>
   );

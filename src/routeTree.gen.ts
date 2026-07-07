@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VaultRouteImport } from './routes/vault'
+import { Route as ProofRouteImport } from './routes/proof'
+import { Route as OnboardRouteImport } from './routes/onboard'
 import { Route as MerchRouteImport } from './routes/merch'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -19,6 +21,16 @@ import { Route as IndexRouteImport } from './routes/index'
 const VaultRoute = VaultRouteImport.update({
   id: '/vault',
   path: '/vault',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProofRoute = ProofRouteImport.update({
+  id: '/proof',
+  path: '/proof',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardRoute = OnboardRouteImport.update({
+  id: '/onboard',
+  path: '/onboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MerchRoute = MerchRouteImport.update({
@@ -53,6 +65,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
+  '/onboard': typeof OnboardRoute
+  '/proof': typeof ProofRoute
   '/vault': typeof VaultRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +75,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
+  '/onboard': typeof OnboardRoute
+  '/proof': typeof ProofRoute
   '/vault': typeof VaultRoute
 }
 export interface FileRoutesById {
@@ -70,13 +86,31 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
+  '/onboard': typeof OnboardRoute
+  '/proof': typeof ProofRoute
   '/vault': typeof VaultRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agent' | '/dashboard' | '/manifesto' | '/merch' | '/vault'
+  fullPaths:
+    | '/'
+    | '/agent'
+    | '/dashboard'
+    | '/manifesto'
+    | '/merch'
+    | '/onboard'
+    | '/proof'
+    | '/vault'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agent' | '/dashboard' | '/manifesto' | '/merch' | '/vault'
+  to:
+    | '/'
+    | '/agent'
+    | '/dashboard'
+    | '/manifesto'
+    | '/merch'
+    | '/onboard'
+    | '/proof'
+    | '/vault'
   id:
     | '__root__'
     | '/'
@@ -84,6 +118,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/manifesto'
     | '/merch'
+    | '/onboard'
+    | '/proof'
     | '/vault'
   fileRoutesById: FileRoutesById
 }
@@ -93,6 +129,8 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   ManifestoRoute: typeof ManifestoRoute
   MerchRoute: typeof MerchRoute
+  OnboardRoute: typeof OnboardRoute
+  ProofRoute: typeof ProofRoute
   VaultRoute: typeof VaultRoute
 }
 
@@ -103,6 +141,20 @@ declare module '@tanstack/react-router' {
       path: '/vault'
       fullPath: '/vault'
       preLoaderRoute: typeof VaultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/proof': {
+      id: '/proof'
+      path: '/proof'
+      fullPath: '/proof'
+      preLoaderRoute: typeof ProofRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboard': {
+      id: '/onboard'
+      path: '/onboard'
+      fullPath: '/onboard'
+      preLoaderRoute: typeof OnboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/merch': {
@@ -149,8 +201,20 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   ManifestoRoute: ManifestoRoute,
   MerchRoute: MerchRoute,
+  OnboardRoute: OnboardRoute,
+  ProofRoute: ProofRoute,
   VaultRoute: VaultRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
