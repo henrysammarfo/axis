@@ -44,6 +44,16 @@ export function ScatteredGrid({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      const cards = containerRef.current?.querySelectorAll<HTMLElement>(".bp-card") ?? [];
+      cards.forEach((el) => {
+        el.style.transform = "scale(1)";
+      });
+      return;
+    }
     let raf = 0;
     const tick = () => {
       const vh = window.innerHeight;
