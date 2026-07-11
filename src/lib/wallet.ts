@@ -6,6 +6,7 @@
 import { Magic } from "magic-sdk";
 import { OAuthExtension } from "@magic-ext/oauth2";
 import { axisApi } from "./api";
+import { isFrontendFullyConfigured, missingFrontendEnv } from "./env";
 
 export type WalletSession = {
   userId: string;
@@ -17,16 +18,22 @@ export type WalletSession = {
 
 const SESSION_KEY = "axis_wallet_session";
 
-function createMagic(): Magic {
-  const magicKey = import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY;
-  if (!magicKey) {
-    throw new Error(
-      "Wallet not configured. Add VITE_MAGIC_PUBLISHABLE_KEY — see docs/KEYS_SETUP.md",
-    );
+function requireEnv(name: string): string {
+  const value = import.meta.env[name]?.toString().trim();
+  if (!value) {
+    throw new Error(`Missing ${name}. See docs/KEYS_SETUP.md`);
   }
+  return value;
+}
+
+function createMagic(): Magic {
+  const magicKey = requireEnv("VITE_MAGIC_PUBLISHABLE_KEY");
   return new Magic(magicKey, {
     extensions: [new OAuthExtension()],
-    network: { rpcUrl: "https://arb1.arbitrum.io/rpc", chainId: 42161 },
+    network: {
+      rpcUrl: requireEnv("VITE_ARBITRUM_RPC_URL"),
+      chainId: 42161,
+    },
   });
 }
 
@@ -53,12 +60,11 @@ export function clearSession(): void {
 }
 
 export function isWalletConfigured(): boolean {
-  return Boolean(
-    import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY &&
-    import.meta.env.VITE_PARTICLE_PROJECT_ID &&
-    import.meta.env.VITE_PARTICLE_CLIENT_KEY &&
-    import.meta.env.VITE_PARTICLE_APP_ID,
-  );
+  return isFrontendFullyConfigured();
+}
+
+export function walletConfigErrors(): string[] {
+  return missingFrontendEnv();
 }
 
 /** Start Google OAuth — redirects away from the app */
@@ -75,7 +81,7 @@ export async function loginWithGoogle(): Promise<never> {
 
 /** Complete OAuth after redirect return */
 export async function handleOAuthRedirect(): Promise<WalletSession | null> {
-  if (!import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY) return null;
+  if (!isFrontendFullyConfigured()) return null;
 
   const magic = createMagic();
   try {
@@ -89,7 +95,7 @@ export async function handleOAuthRedirect(): Promise<WalletSession | null> {
 
 /** Resume session if already logged in with Magic */
 export async function resumeSession(): Promise<WalletSession | null> {
-  if (!import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY) return null;
+  if (!isFrontendFullyConfigured()) return null;
   const magic = createMagic();
   if (!(await magic.user.isLoggedIn())) return null;
   return finalizeSession(magic);
@@ -105,7 +111,7 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
     throw new Error("Wallet address unavailable. Complete Magic wallet setup.");
   }
 
-  if (!import.meta.env.VITE_PARTICLE_PROJECT_ID) {
+  if (!requireEnv("VITE_PARTICLE_PROJECT_ID")) {
     throw new Error("Particle Network not configured. Add VITE_PARTICLE_* keys.");
   }
 
@@ -113,9 +119,8 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
   uaAddress = ua.address;
   const sraAddress = await createSmartRoutingAddress(uaAddress);
 
-  if (!import.meta.env.VITE_ZERODEV_PROJECT_ID) {
-    throw new Error("ZeroDev not configured. Add VITE_ZERODEV_PROJECT_ID for SRA deposits.");
-  }
+  requireEnv("VITE_ZERODEV_PROJECT_ID");
+  requireEnv("VITE_ZERODEV_RPC_URL");
   if (!sraAddress) {
     throw new Error("Failed to create Smart Routing Address.");
   }
@@ -142,9 +147,9 @@ async function upgradeToUniversalAccount(magic: Magic) {
   const signer = await ethersProvider.getSigner();
 
   const ua = new UniversalAccount(signer, {
-    projectId: import.meta.env.VITE_PARTICLE_PROJECT_ID!,
-    clientKey: import.meta.env.VITE_PARTICLE_CLIENT_KEY!,
-    appId: import.meta.env.VITE_PARTICLE_APP_ID!,
+    projectId: requireEnv("VITE_PARTICLE_PROJECT_ID"),
+    clientKey: requireEnv("VITE_PARTICLE_CLIENT_KEY"),
+    appId: requireEnv("VITE_PARTICLE_APP_ID"),
     eip7702: true,
     chainId: 42161,
   });
@@ -176,7 +181,7 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
 }
 
 export async function logout(): Promise<void> {
-  if (import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY) {
+  if (isFrontendFullyConfigured()) {
     try {
       const magic = createMagic();
       await magic.user.logout();

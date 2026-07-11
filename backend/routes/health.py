@@ -10,39 +10,46 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health():
     settings = get_settings()
+    missing = settings.missing_required()
     return {
-        "status": "ok",
+        "status": "ok" if settings.fully_configured else "degraded",
         "service": "axis-backend",
         "environment": settings.environment,
         "ai_provider": settings.ai_provider,
-        "wallet_configured": settings.wallet_configured,
-        "zerodev_configured": settings.zerodev_configured,
+        "fully_configured": settings.fully_configured,
+        "missing_keys": missing,
     }
 
 
 @router.get("/config/status")
 async def config_status():
-    """Public-safe config status for frontend to show setup progress."""
+    """Public-safe config status for frontend setup checklist."""
     settings = get_settings()
+    missing = settings.missing_required()
     return {
+        "fully_configured": settings.fully_configured,
+        "missing_keys": missing,
         "ai": {
             "venice": bool(settings.venice_api_key),
             "openai": bool(settings.openai_api_key),
-            "anthropic": bool(settings.anthropic_api_key),
             "active_provider": settings.ai_provider,
         },
         "wallet": {
             "magic": bool(settings.magic_secret_key and settings.magic_publishable_key),
-            "particle": bool(settings.particle_project_id and settings.particle_client_key),
+            "particle": bool(
+                settings.particle_project_id and settings.particle_client_key and settings.particle_app_id
+            ),
             "zerodev": settings.zerodev_configured,
             "google_oauth": bool(settings.google_client_id),
         },
         "chain": {
             "arbitrum_rpc": settings.arbitrum_rpc,
             "chain_id": settings.arbitrum_chain_id,
+            "dedicated_rpc": settings.chain_configured,
         },
         "intelligence": {
             "tinyfish": bool(settings.tinyfish_api_key),
             "x402_wallet": bool(settings.agent_wallet_private_key),
+            "x402_facilitator": bool(settings.x402_facilitator_url),
         },
     }

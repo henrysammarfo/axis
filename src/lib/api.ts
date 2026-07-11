@@ -28,10 +28,12 @@ export type AgentStatus = {
 };
 
 export type ConfigStatus = {
-  ai: { venice: boolean; openai: boolean; anthropic: boolean; active_provider: string };
+  fully_configured: boolean;
+  missing_keys: string[];
+  ai: { venice: boolean; openai: boolean; active_provider: string };
   wallet: { magic: boolean; particle: boolean; zerodev: boolean; google_oauth: boolean };
-  chain: { arbitrum_rpc: string; chain_id: number };
-  intelligence: { tinyfish: boolean; x402_wallet: boolean };
+  chain: { arbitrum_rpc: string; chain_id: number; dedicated_rpc: boolean };
+  intelligence: { tinyfish: boolean; x402_wallet: boolean; x402_facilitator: boolean };
 };
 
 function authHeaders(): Record<string, string> {

@@ -21,13 +21,18 @@ function Proof() {
   const { data: config } = useAxisConfig();
 
   const checks = [
+    { label: "All backend keys configured", ok: config?.fully_configured },
     { label: "Magic embedded wallet", ok: config?.wallet.magic },
-    { label: "Particle Universal Accounts", ok: config?.wallet.particle },
+    { label: "Particle Universal Accounts (EIP-7702)", ok: config?.wallet.particle },
     { label: "ZeroDev gas abstraction + SRA", ok: config?.wallet.zerodev },
-    { label: "Arbitrum settlement (chain 42161)", ok: config?.chain.chain_id === 42161 },
-    { label: "AI agent (Venice/OpenAI/Anthropic)", ok: config?.ai.active_provider !== "rules" },
-    { label: "TinyFish web intelligence", ok: config?.intelligence.tinyfish },
-    { label: "x402 agent wallet", ok: config?.intelligence.x402_wallet },
+    { label: "Dedicated Arbitrum RPC (Alchemy/Infura)", ok: config?.chain.dedicated_rpc },
+    { label: "Venice AI (primary)", ok: config?.ai.venice },
+    { label: "OpenAI AI (fallback)", ok: config?.ai.openai },
+    { label: "TinyFish live yield scraping", ok: config?.intelligence.tinyfish },
+    {
+      label: "x402 agent wallet + facilitator",
+      ok: config?.intelligence.x402_wallet && config?.intelligence.x402_facilitator,
+    },
     { label: "Google OAuth", ok: config?.wallet.google_oauth },
   ];
 
@@ -41,6 +46,14 @@ function Proof() {
         UXmaxx Hackathon — Universal Accounts + Arbitrum + Magic Labs + ZeroDev
       </p>
 
+      {config?.missing_keys && config.missing_keys.length > 0 && (
+        <section className="mt-6 border border-red-500/30 bg-red-500/5 p-4 text-sm">
+          <p className="text-red-300 font-medium">Missing backend keys:</p>
+          <p className="mt-2 text-white/60">{config.missing_keys.join(", ")}</p>
+          <p className="mt-2 text-white/40 text-xs">See docs/KEYS_SETUP.md</p>
+        </section>
+      )}
+
       <section className="mt-10 border border-white/10 p-6">
         <h2 className="text-xs uppercase tracking-widest text-white/50 mb-4">
           Integration checklist
@@ -50,7 +63,7 @@ function Proof() {
             <li key={c.label} className="flex items-center justify-between text-sm">
               <span>{c.label}</span>
               <span className={c.ok ? "text-[color:var(--color-lime)]" : "text-white/30"}>
-                {c.ok ? "✓ Ready" : "○ Pending keys"}
+                {c.ok ? "✓ Ready" : "○ Missing"}
               </span>
             </li>
           ))}

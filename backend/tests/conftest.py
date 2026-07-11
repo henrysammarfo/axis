@@ -2,10 +2,26 @@
 
 import os
 
-# Set env before any settings cache
-os.environ["ENVIRONMENT"] = "testing"
-os.environ["VENICE_API_KEY"] = "test-venice-key"
-os.environ["MAGIC_SECRET_KEY"] = "test-magic-secret"
+# Set env before any settings cache — all keys required in production
+_TEST_ENV = {
+    "ENVIRONMENT": "testing",
+    "VENICE_API_KEY": "test-venice-key",
+    "OPENAI_API_KEY": "test-openai-key",
+    "TINYFISH_API_KEY": "test-tinyfish-key",
+    "MAGIC_SECRET_KEY": "test-magic-secret",
+    "MAGIC_PUBLISHABLE_KEY": "pk_test_magic",
+    "PARTICLE_PROJECT_ID": "test-particle-project",
+    "PARTICLE_CLIENT_KEY": "test-particle-client",
+    "PARTICLE_APP_ID": "test-particle-app",
+    "ZERODEV_PROJECT_ID": "test-zerodev-project",
+    "ZERODEV_RPC_URL": "https://rpc.zerodev.app/api/v3/test-zerodev-project/chain/42161",
+    "GOOGLE_CLIENT_ID": "test-google-client-id.apps.googleusercontent.com",
+    "ARBITRUM_RPC": "https://arb-mainnet.g.alchemy.com/v2/test-alchemy-key",
+    "AGENT_WALLET_PRIVATE_KEY": "0x" + "a" * 64,
+    "X402_FACILITATOR_URL": "https://facilitator.payai.network",
+}
+for _key, _value in _TEST_ENV.items():
+    os.environ.setdefault(_key, _value)
 
 import pytest
 from httpx import ASGITransport, AsyncClient

@@ -8,7 +8,7 @@ from rate_limit import limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
-from config import get_settings
+from config import get_settings, validate_startup_config
 from database import init_db
 from routes.agent import router as agent_router
 from routes.auth import router as auth_router
@@ -21,6 +21,7 @@ limiter.default_limits = [f"{settings.rate_limit_per_minute}/minute"]
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    validate_startup_config()
     await init_db()
     yield
 

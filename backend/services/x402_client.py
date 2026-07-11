@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 COST_PER_QUERY = 0.001
 
 
+class IntelligenceUnavailable(Exception):
+    """Raised when market intelligence cannot be fetched from any live source."""
+
+
 class X402Client:
     def __init__(self, agent_wallet_address: str, db: AsyncSession | None = None) -> None:
         self.settings = get_settings()
@@ -25,21 +29,20 @@ class X402Client:
         self.db = db
         self.facilitator_url = self.settings.x402_facilitator_url.rstrip("/")
 
+        if not self.settings.agent_wallet_private_key:
+            raise RuntimeError("AGENT_WALLET_PRIVATE_KEY is required for x402 intelligence")
+        if not self.settings.venice_api_key:
+            raise RuntimeError("VENICE_API_KEY is required for market intelligence fallback")
+
     async def fetch_intelligence(self, query: str, user_id: str) -> dict[str, Any]:
         if not await self._within_daily_cap(user_id):
-            return {
-                "query": query,
-                "signal": "neutral",
-                "recommendation": "Daily intelligence budget reached. Using cached analysis.",
-                "risk_level": "medium",
-                "source": "budget_cap",
-                "paid": False,
-            }
+            raise IntelligenceUnavailable(
+                f"Daily x402 intelligence budget reached (${self.settings.max_x402_spend_usdc_per_day} USDC cap)"
+            )
 
-        if self.settings.agent_wallet_private_key:
-            paid = await self._try_x402_payment(query, user_id)
-            if paid:
-                return paid
+        paid = await self._try_x402_payment(query, user_id)
+        if paid:
+            return paid
 
         return await self._venice_web_intelligence(query, user_id)
 
@@ -68,9 +71,6 @@ class X402Client:
         return None
 
     async def _venice_web_intelligence(self, query: str, user_id: str) -> dict[str, Any]:
-        if not self.settings.venice_api_key:
-            return self._fallback_intelligence(query)
-
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 r = await client.post(
@@ -81,7 +81,11 @@ class X402Client:
                         "messages": [
                             {
                                 "role": "user",
-                                "content": f"Analyze DeFi market conditions for: {query}. Return JSON with signal (bullish/neutral/bearish), recommendation, risk_level.",
+                                "content": (
+                                    f"Analyze DeFi market conditions for: {query}. "
+                                    "Return JSON with signal (bullish/neutral/bearish), "
+                                    "recommendation, risk_level."
+                                ),
                             }
                         ],
                         "venice_parameters": {"enable_web_search": True},
@@ -102,21 +106,13 @@ class X402Client:
         except Exception as exc:
             logger.warning("Venice web intelligence failed: %s", exc)
 
-        return self._fallback_intelligence(query)
+        raise IntelligenceUnavailable(
+            f"Market intelligence unavailable for query: {query[:80]}"
+        )
 
     def _build_payment_header(self, query: str) -> str:
         memo = f"AXIS market intelligence: {query[:50]}"
         return f"x402 amount={int(COST_PER_QUERY * 1e6)} currency=USDC chain=eip155:42161 memo={memo}"
-
-    def _fallback_intelligence(self, query: str) -> dict[str, Any]:
-        return {
-            "query": query,
-            "signal": "neutral",
-            "recommendation": "Market conditions appear stable. Standard allocation applies.",
-            "risk_level": "medium",
-            "source": "fallback_analysis",
-            "paid": False,
-        }
 
     async def _within_daily_cap(self, user_id: str) -> bool:
         if not self.db:

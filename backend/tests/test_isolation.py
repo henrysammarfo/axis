@@ -120,8 +120,23 @@ async def test_agent_tool_positions_ignore_foreign_user_id(db_session):
 
 
 @pytest.mark.asyncio
-async def test_agent_allocation_respects_budget_cap(db_session):
+async def test_agent_allocation_respects_budget_cap(db_session, monkeypatch):
     tracker = PortfolioTracker(db_session)
+
+    async def mock_execute(self, **kwargs):
+        return {
+            "success": True,
+            "tx_hash": "0xtest",
+            "chain": "arbitrum",
+            "estimated_apy": 4.0,
+        }
+
+    async def mock_estimate(self, protocol, asset):
+        return 4.0
+
+    monkeypatch.setattr("services.defi_executor.DeFiExecutor.execute", mock_execute)
+    monkeypatch.setattr("services.defi_executor.DeFiExecutor._estimate_apy", mock_estimate)
+
     agent = AxisAgent(DeFiExecutor(UA_A), X402Client(UA_A, db_session), tracker)
     agent._session_user_id = "test-user"
     agent._budget_usdc = 100
@@ -137,17 +152,17 @@ async def test_agent_allocation_respects_budget_cap(db_session):
         },
         "test-user",
     )
-    assert first["success"] is False
+    assert first["success"] is True
 
-    second = await agent._execute_tool(
+    over = await agent._execute_tool(
         "execute_allocation",
         {
             "protocol": "aave",
             "asset": "USDC",
-            "amount_usdc": 120,
+            "amount_usdc": 30,
             "action": "supply",
         },
         "test-user",
     )
-    assert second["success"] is False
-    assert "budget" in second["error"].lower()
+    assert over["success"] is False
+    assert "budget" in over["error"].lower()

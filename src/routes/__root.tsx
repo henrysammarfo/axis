@@ -11,6 +11,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { assertFrontendEnv } from "../lib/env";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { CustomCursor } from "../components/brand/CustomCursor";
 import { MobileBottomNav } from "../components/brand/MobileMenu";
@@ -113,6 +114,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const showBottomNav = pathname !== "/";
+
+  useEffect(() => {
+    assertFrontendEnv();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <CustomCursor />

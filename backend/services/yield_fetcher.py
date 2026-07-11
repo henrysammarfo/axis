@@ -1,4 +1,4 @@
-"""Real DeFi yield data from on-chain sources, public APIs, and TinyFish fallback."""
+"""Real DeFi yield data — live sources only, TinyFish when APIs fail."""
 
 from __future__ import annotations
 
@@ -19,34 +19,32 @@ AAVE_ASSETS = {
     "WBTC": "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f",
 }
 
-# Approximate fallback APYs when all live sources fail
-FALLBACK_APYS = {
-    "USDC": 4.2,
-    "USDT": 3.8,
-    "ETH": 0.8,
-    "WBTC": 0.3,
-}
+
+class YieldDataUnavailable(Exception):
+    """Raised when no live yield source returns data."""
 
 
 class YieldFetcher:
     def __init__(self) -> None:
         self.settings = get_settings()
+        if not self.settings.tinyfish_api_key:
+            raise RuntimeError("TINYFISH_API_KEY is required for yield data")
 
     async def get_aave_apy(self, asset: str) -> dict[str, Any]:
         asset = asset.upper()
         if asset not in AAVE_ASSETS:
             return {"error": f"Asset {asset} not supported on Aave Arbitrum"}
 
-        # Primary: Aave v3 markets API
+        errors: list[str] = []
+
         try:
             async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.get("https://api.v3.aave.com/graphql", params={"query": self._aave_query(asset)})
+                r = await client.get(
+                    "https://api.v3.aave.com/graphql",
+                    params={"query": self._aave_query(asset)},
+                )
                 if r.status_code == 200:
-                    data = r.json()
-                    reserves = (
-                        data.get("data", {})
-                        .get("reserves", [])
-                    )
+                    reserves = r.json().get("data", {}).get("reserves", [])
                     for reserve in reserves:
                         if reserve.get("symbol", "").upper() == asset:
                             apy = float(reserve.get("supplyAPY", 0) or 0)
@@ -60,9 +58,9 @@ class YieldFetcher:
                                 "source": "aave_api",
                             }
         except Exception as exc:
+            errors.append(f"aave_api: {exc}")
             logger.warning("Aave API failed: %s", exc)
 
-        # Secondary: legacy markets endpoint
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.get(
@@ -82,22 +80,16 @@ class YieldFetcher:
                                 "source": "aave_legacy_api",
                             }
         except Exception as exc:
+            errors.append(f"aave_legacy: {exc}")
             logger.warning("Aave legacy API failed: %s", exc)
 
-        # Tertiary: TinyFish scrape
-        if self.settings.tinyfish_api_key:
-            scraped = await self._tinyfish_aave_apy(asset)
-            if scraped:
-                return scraped
+        scraped = await self._tinyfish_aave_apy(asset)
+        if scraped:
+            return scraped
 
-        return {
-            "asset": asset,
-            "supply_apy": FALLBACK_APYS.get(asset, 2.0),
-            "protocol": "aave_v3",
-            "chain": "arbitrum",
-            "source": "fallback",
-            "note": "Live API unavailable; using conservative estimate",
-        }
+        raise YieldDataUnavailable(
+            f"Live Aave yield unavailable for {asset}. Errors: {'; '.join(errors)}"
+        )
 
     async def get_gmx_apy(self) -> dict[str, Any]:
         try:
@@ -118,14 +110,11 @@ class YieldFetcher:
         except Exception as exc:
             logger.warning("GMX API failed: %s", exc)
 
-        return {
-            "protocol": "gmx_glp",
-            "apy": 15.0,
-            "chain": "arbitrum",
-            "risk": "medium",
-            "source": "fallback",
-            "note": "GLP APR estimate when live API unavailable",
-        }
+        scraped = await self._tinyfish_gmx_apy()
+        if scraped:
+            return scraped
+
+        raise YieldDataUnavailable("Live GMX yield unavailable from API and TinyFish")
 
     async def get_uniswap_apy(self, token0: str, token1: str, fee_tier: int = 3000) -> dict[str, Any]:
         query = """
@@ -177,15 +166,9 @@ class YieldFetcher:
             except Exception as exc:
                 logger.warning("Uniswap subgraph %s failed: %s", url, exc)
 
-        return {
-            "token0": token0,
-            "token1": token1,
-            "estimated_apy": 8.0,
-            "protocol": "uniswap_v3",
-            "chain": "arbitrum",
-            "source": "fallback",
-            "error": "No live pool data",
-        }
+        raise YieldDataUnavailable(
+            f"Live Uniswap pool data unavailable for {token0}/{token1} fee {fee_tier}"
+        )
 
     async def _tinyfish_aave_apy(self, asset: str) -> dict[str, Any] | None:
         try:
@@ -202,6 +185,7 @@ class YieldFetcher:
                     result = r.json().get("result_json") or r.json().get("result", {})
                     if isinstance(result, str):
                         import json
+
                         result = json.loads(result)
                     apy = float(result.get("supply_apy", 0))
                     if apy > 0:
@@ -214,6 +198,36 @@ class YieldFetcher:
                         }
         except Exception as exc:
             logger.warning("TinyFish Aave scrape failed: %s", exc)
+        return None
+
+    async def _tinyfish_gmx_apy(self) -> dict[str, Any] | None:
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(
+                    "https://agent.tinyfish.ai/v1/automation/run",
+                    headers={"X-API-Key": self.settings.tinyfish_api_key},
+                    json={
+                        "url": "https://app.gmx.io/#/earn",
+                        "goal": 'Return JSON: {"apy": number} for GLP APR on Arbitrum',
+                    },
+                )
+                if r.status_code == 200:
+                    result = r.json().get("result_json") or r.json().get("result", {})
+                    if isinstance(result, str):
+                        import json
+
+                        result = json.loads(result)
+                    apy = float(result.get("apy", 0))
+                    if apy > 0:
+                        return {
+                            "protocol": "gmx_glp",
+                            "apy": apy,
+                            "chain": "arbitrum",
+                            "risk": "medium",
+                            "source": "tinyfish",
+                        }
+        except Exception as exc:
+            logger.warning("TinyFish GMX scrape failed: %s", exc)
         return None
 
     def _aave_query(self, asset: str) -> str:

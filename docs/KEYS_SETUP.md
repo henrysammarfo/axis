@@ -1,193 +1,293 @@
-# AXIS — API Keys Setup Guide
+# AXIS — Complete API Keys Setup (Nothing Optional)
 
-> **Give these keys to your agent when ready.** Never commit real values to git.
+> **Last updated:** July 2026  
+> AXIS will **not start** until every key below is configured. No mocks, no fallbacks, no public RPC.
+
+Paste keys into:
+1. `backend/.env` (copy from `backend/.env.example`)
+2. Lovable environment variables (copy from `.env.example` at repo root)
+
+Run `python3 scripts/validate-env.py` to verify backend keys before starting.
 
 ---
 
-## Keys You Already Have
+## Quick checklist — 14 backend + 9 frontend keys
 
-| Key | Env variable | Status |
-|-----|--------------|--------|
-| OpenAI | `OPENAI_API_KEY` | Ready to use |
-| Venice API | `VENICE_API_KEY` | Ready to use (recommended primary AI) |
-| TinyFish AI | `TINYFISH_API_KEY` | Ready to use |
-| Microsoft Azure | subscription | Ready for hosting |
+| # | Service | Backend env | Frontend env | You have? |
+|---|---------|-------------|--------------|-----------|
+| 1 | Venice AI | `VENICE_API_KEY` | — | ✅ |
+| 2 | OpenAI | `OPENAI_API_KEY` | — | ✅ |
+| 3 | TinyFish | `TINYFISH_API_KEY` | — | ✅ |
+| 4 | Magic Labs | `MAGIC_SECRET_KEY`, `MAGIC_PUBLISHABLE_KEY` | `VITE_MAGIC_PUBLISHABLE_KEY` | Get |
+| 5 | Google OAuth | `GOOGLE_CLIENT_ID` | `VITE_GOOGLE_CLIENT_ID` | Get |
+| 6 | Particle UA | `PARTICLE_PROJECT_ID`, `PARTICLE_CLIENT_KEY`, `PARTICLE_APP_ID` | same `VITE_*` | Get |
+| 7 | ZeroDev | `ZERODEV_PROJECT_ID`, `ZERODEV_RPC_URL` | `VITE_ZERODEV_*` | Get |
+| 8 | Alchemy RPC | `ARBITRUM_RPC` | `VITE_ARBITRUM_RPC_URL` | Get |
+| 9 | x402 wallet | `AGENT_WALLET_PRIVATE_KEY` | — | Create |
+| 10 | x402 facilitator | `X402_FACILITATOR_URL` | — | Default OK |
+| 11 | API URL | — | `VITE_API_URL` | Set after deploy |
 
-Paste into `backend/.env`:
+---
+
+## Keys you already have — paste these first
+
+### 1. Venice API (primary AI brain)
+
+1. Go to https://venice.ai → sign in
+2. Open **API Keys** in settings
+3. Create key → copy to `VENICE_API_KEY`
+
 ```bash
-VENICE_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here
-TINYFISH_API_KEY=your_key_here
+VENICE_API_KEY=your_venice_key
+```
+
+Docs: https://docs.venice.ai
+
+---
+
+### 2. OpenAI (required fallback AI)
+
+1. Go to https://platform.openai.com/api-keys
+2. Click **Create new secret key**
+3. Copy immediately (shown once)
+
+```bash
+OPENAI_API_KEY=sk-proj-...
 ```
 
 ---
 
-## Keys You MUST Get (Required for Full Production)
+### 3. TinyFish AI (required live yield scraping)
 
-### 1. Magic Labs — Embedded Wallet + Google Login
+1. Go to https://agent.tinyfish.ai
+2. Sign up / sign in
+3. Navigate to **API Keys** → create key
 
-**Why:** Creates invisible EOA wallet on Google sign-in. Required for Magic Labs $500 bonus.
-
-**Steps:**
-1. Go to https://magic.link/dashboard
-2. Click **Create App** (or use existing app)
-3. Name it `AXIS`
-4. Copy **Publishable API Key** → `MAGIC_PUBLISHABLE_KEY`
-5. Copy **Secret Key** → `MAGIC_SECRET_KEY`
-6. Enable **Google** under Social Logins
-7. Add your Lovable app URL to allowed origins
-
-**Frontend env (public):**
 ```bash
+TINYFISH_API_KEY=your_tinyfish_key
+```
+
+Docs: https://docs.tinyfish.ai
+
+---
+
+## Wallet stack — required for sign-in + on-chain execution
+
+### 4. Magic Labs — embedded wallet + Google login
+
+**Hackathon track:** Magic Labs ($500 bonus)
+
+1. Go to https://dashboard.magic.link
+2. Sign up (free developer account)
+3. Click **Create App** → name it `AXIS`
+4. From app home, copy:
+   - **Publishable API Key** → `MAGIC_PUBLISHABLE_KEY` + `VITE_MAGIC_PUBLISHABLE_KEY`
+   - **Secret Key** → `MAGIC_SECRET_KEY` (backend only, never frontend)
+5. Go to **Settings → Allowed Origins & Redirects**
+   - Add `http://localhost:5173`
+   - Add your Lovable URL: `https://YOUR-APP.lovable.app`
+6. Sidebar → **Social Logins** → enable **Google**
+   - You'll paste Google Client ID + Secret here in step 5 below
+
+```bash
+# backend/.env
+MAGIC_PUBLISHABLE_KEY=pk_live_...
+MAGIC_SECRET_KEY=sk_live_...
+
+# Lovable
 VITE_MAGIC_PUBLISHABLE_KEY=pk_live_...
 ```
 
-**Backend env (secret):**
+Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social-providers/google
+
+---
+
+### 5. Google OAuth — required for Magic Google sign-in
+
+1. Go to https://console.cloud.google.com
+2. Create project named `AXIS` (or select existing)
+3. **APIs & Services → OAuth consent screen**
+   - User type: **External**
+   - App name: `AXIS`
+   - Support email: your email
+   - Add scopes: `email`, `profile`, `openid`
+   - Add test users (your Gmail) while in Testing mode
+   - For production demo: set **Publishing status → In production**
+4. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+   - Type: **Web application**
+   - Name: `AXIS Web`
+   - **Authorized JavaScript origins:**
+     - `http://localhost:5173`
+     - `https://YOUR-APP.lovable.app`
+   - **Authorized redirect URIs:** copy the redirect URI shown in Magic dashboard under Google OAuth settings and paste it here exactly
+5. Copy **Client ID** → both env files
+6. Copy **Client Secret** → paste into Magic dashboard (Social Logins → Google) — not stored in AXIS backend
+
 ```bash
-MAGIC_SECRET_KEY=sk_live_...
-MAGIC_PUBLISHABLE_KEY=pk_live_...
+GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
 ```
 
-**Docs:** https://docs.magic.link/embedded-wallets/authentication/login/oauth/social-providers/google
+Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social-providers/google
 
 ---
 
-### 2. Google OAuth Client ID — For Magic Google Login
+### 6. Particle Network — Universal Accounts + EIP-7702
 
-**Why:** Magic needs your Google OAuth client to verify Google sign-ins.
+**Hackathon track:** Universal Accounts (30% of score)
 
-**Steps:**
-1. Go to https://console.cloud.google.com
-2. Create or select a project named `AXIS`
-3. Navigate to **APIs & Services → OAuth consent screen**
-4. Set user type to **External**, fill app name `AXIS`
-5. Add authorized domain: your Lovable app domain + `magic.link`
-6. Go to **Credentials → Create Credentials → OAuth client ID**
-7. Application type: **Web application**
-8. Authorized JavaScript origins: `https://your-app.lovable.app`, `http://localhost:5173`
-9. Copy **Client ID** → `GOOGLE_CLIENT_ID`
-10. Send Client ID to Magic dashboard under Google OAuth settings
-
-**Docs:** https://docs.magic.link/embedded-wallets/authentication/login/oauth/social-providers/google
-
----
-
-### 3. Particle Network — Universal Accounts + EIP-7702
-
-**Why:** Core hackathon requirement (30% of UA track score). Upgrades EOA to cross-chain UA.
-
-**Steps:**
 1. Go to https://dashboard.particle.network
-2. Create a new project named `AXIS`
-3. Copy these three values:
-   - **Project ID** → `PARTICLE_PROJECT_ID`
-   - **Client Key** → `PARTICLE_CLIENT_KEY`
-   - **App ID** → `PARTICLE_APP_ID`
-4. Enable **Universal Accounts** in project settings
-5. Set mode to **EIP-7702** (7702 mode)
+2. Sign up → **Create Project** named `AXIS`
+3. From project overview, copy:
+   - **Project ID** → `PARTICLE_PROJECT_ID` / `VITE_PARTICLE_PROJECT_ID`
+   - **Client Key** → `PARTICLE_CLIENT_KEY` / `VITE_PARTICLE_CLIENT_KEY`
+   - **App ID** (App UUID) → `PARTICLE_APP_ID` / `VITE_PARTICLE_APP_ID`
+4. In project settings, ensure **Universal Accounts** is enabled
+5. Use **EIP-7702 mode** (default in UA SDK v2) — EOA upgrades in-place
 
-**Frontend env (public):**
 ```bash
+PARTICLE_PROJECT_ID=...
+PARTICLE_CLIENT_KEY=...
+PARTICLE_APP_ID=...
+
 VITE_PARTICLE_PROJECT_ID=...
 VITE_PARTICLE_CLIENT_KEY=...
 VITE_PARTICLE_APP_ID=...
 ```
 
-**Reference demo:** https://github.com/Particle-Network/ua-7702-magic-demo
-
-**Docs:** https://developers.particle.network/universal-accounts/ua-reference/web/overview
+Reference demo: https://github.com/Particle-Network/ua-7702-magic-demo  
+Docs: https://developers.particle.network/universal-accounts/ua-reference/web/overview
 
 ---
 
-### 4. ZeroDev — Gasless Transactions + Smart Routing Address
+### 7. ZeroDev — gasless txs + Smart Routing Address
 
-**Why:** Required for ZeroDev $500 subtrack. SRA receives cross-chain deposits.
+**Hackathon track:** ZeroDev ($500 subtrack)
 
-**Steps:**
 1. Go to https://dashboard.zerodev.app
-2. Create a new project named `AXIS`
-3. Select **Arbitrum One** as primary chain
-4. Copy **Project ID** → `ZERODEV_PROJECT_ID`
-5. Enable **Bundler** and **Paymaster** (gas sponsorship)
-6. Copy bundler URL → `ZERODEV_BUNDLER_URL`
-   - Format: `https://rpc.zerodev.app/api/v2/bundler/YOUR_PROJECT_ID`
-7. Copy paymaster URL → `ZERODEV_PAYMASTER_URL`
-   - Format: `https://rpc.zerodev.app/api/v2/paymaster/YOUR_PROJECT_ID`
+2. Sign up → **Create Project**
+3. Enable **Arbitrum One** (chain ID `42161`) on the project
+4. Copy **Project ID** → `ZERODEV_PROJECT_ID` / `VITE_ZERODEV_PROJECT_ID`
+5. Go to **Gas Policies** → create policy → enable **Sponsor all transactions** (or scoped policy)
+6. From project home, copy the **v3 RPC URL** for Arbitrum One:
+   ```
+   https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/42161
+   ```
+   This single URL is used for **both bundler and paymaster** (ZeroDev v3).
 
-**Frontend env (public):**
 ```bash
+ZERODEV_PROJECT_ID=...
+ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/42161
+
 VITE_ZERODEV_PROJECT_ID=...
+VITE_ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/42161
 ```
 
-**Docs:** https://docs.zerodev.app/cross-chain/smart-routing-address
+Docs: https://docs.zerodev.app/get-started/sdks/setup-project  
+SRA docs: https://docs.zerodev.app/cross-chain/smart-routing-address
 
 ---
 
-### 5. Arbitrum RPC (Optional but Recommended for Production)
+### 8. Alchemy — dedicated Arbitrum RPC (required)
 
-**Why:** Public RPC works for dev; dedicated RPC is faster and more reliable.
+Public RPC (`arb1.arbitrum.io`) is **blocked** by AXIS. You need a dedicated key.
 
-**Free options:**
-- Alchemy: https://www.alchemy.com → create app on Arbitrum One
-- Infura: https://infura.io → create project, enable Arbitrum
+1. Go to https://dashboard.alchemy.com
+2. Sign up → **Create App**
+   - Chain: **Arbitrum**
+   - Network: **Arbitrum One**
+   - Name: `AXIS`
+3. Open app → **API Key** → copy HTTPS URL
 
 ```bash
-ARBITRUM_RPC=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+ARBITRUM_RPC=https://arb-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+VITE_ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
 ```
 
-**Default (works without key):**
+Alternative: Infura https://infura.io — create project, enable Arbitrum, use:
+`https://arbitrum-mainnet.infura.io/v3/YOUR_PROJECT_ID`
+
+---
+
+### 9. x402 agent wallet — required for autonomous micropayments
+
+**Hackathon wow factor:** AI pays for market intelligence on-chain
+
+1. Create a **new** Ethereum wallet (MetaMask → Create Account → export private key)
+   - Use a dedicated agent wallet, not your personal wallet
+2. Fund on **Arbitrum One**:
+   - ~$5 USDC (for x402 micropayments)
+   - ~$2 ETH (small gas buffer if needed)
+3. Store private key securely:
+
 ```bash
-ARBITRUM_RPC=https://arb1.arbitrum.io/rpc
+AGENT_WALLET_PRIVATE_KEY=0xYOUR_PRIVATE_KEY
+X402_FACILITATOR_URL=https://facilitator.payai.network
+```
+
+**Never commit this key.** Use Azure Key Vault in production.
+
+Docs: https://docs.payai.network/x402/supported-networks
+
+---
+
+## Frontend API URL
+
+After backend is running locally or deployed:
+
+```bash
+# Local dev
+VITE_API_URL=http://localhost:8000
+
+# Production (Azure App Service URL)
+VITE_API_URL=https://axis-api-YOUR.azurewebsites.net
 ```
 
 ---
 
-### 6. x402 Agent Wallet (Optional — For Real Micropayments)
+## Azure hosting (you already have subscription)
 
-**Why:** Shows autonomous AI payments on Arbitrum. Impressive for judges.
+Deploy backend with `azure/deploy.bicep`. Store all secrets in **Azure Key Vault**, not in git.
 
-**Steps:**
-1. Create a new Arbitrum wallet (keep private key secure)
-2. Fund with ~$5 USDC on Arbitrum One
-3. Store private key in Azure Key Vault → `AGENT_WALLET_PRIVATE_KEY`
-
-**Docs:** https://docs.payai.network/x402/supported-networks
+1. Azure Portal → **Key Vault** → create vault `axis-vault`
+2. Add each secret from `backend/.env`
+3. Azure **App Service** → Configuration → Key Vault references
+4. Set `VITE_API_URL` in Lovable to the deployed App Service URL
 
 ---
 
-## Complete `backend/.env` Template
-
-Copy `backend/.env.example` to `backend/.env` and fill in:
+## Complete `backend/.env` template
 
 ```bash
-# YOUR KEYS (you have these)
 VENICE_API_KEY=
 OPENAI_API_KEY=
 TINYFISH_API_KEY=
 
-# GET FROM DASHBOARDS (required for on-chain)
 MAGIC_SECRET_KEY=
 MAGIC_PUBLISHABLE_KEY=
 PARTICLE_PROJECT_ID=
 PARTICLE_CLIENT_KEY=
 PARTICLE_APP_ID=
 ZERODEV_PROJECT_ID=
-ZERODEV_BUNDLER_URL=
-ZERODEV_PAYMASTER_URL=
+ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_ID/chain/42161
 GOOGLE_CLIENT_ID=
 
-# CHAIN
-ARBITRUM_RPC=https://arb1.arbitrum.io/rpc
+ARBITRUM_RPC=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+ARBITRUM_CHAIN_ID=42161
 
-# DATABASE (auto in Docker)
+X402_FACILITATOR_URL=https://facilitator.payai.network
+AGENT_WALLET_PRIVATE_KEY=0x...
+
 DATABASE_URL=sqlite+aiosqlite:///./axis.db
+PORT=8000
+FRONTEND_URL=https://YOUR-APP.lovable.app
+CORS_ORIGINS=http://localhost:5173,https://YOUR-APP.lovable.app
+ENVIRONMENT=development
 ```
 
 ---
 
-## Frontend `.env` (Lovable / Vite)
-
-Create or add to Lovable environment variables:
+## Complete Lovable / frontend env
 
 ```bash
 VITE_API_URL=http://localhost:8000
@@ -196,32 +296,80 @@ VITE_PARTICLE_PROJECT_ID=...
 VITE_PARTICLE_CLIENT_KEY=...
 VITE_PARTICLE_APP_ID=...
 VITE_ZERODEV_PROJECT_ID=...
-VITE_GOOGLE_CLIENT_ID=...
+VITE_ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_ID/chain/42161
+VITE_GOOGLE_CLIENT_ID=....apps.googleusercontent.com
+VITE_ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 ```
 
 ---
 
-## Priority Order
+## Setup order (do this sequence)
 
-| Priority | Keys | Unlocks |
-|----------|------|---------|
-| **P0 — Start now** | Venice + OpenAI + TinyFish | AI agent, yield data, reports |
-| **P1 — Wallet** | Magic + Google OAuth | Google login, embedded wallet |
-| **P1 — UA** | Particle Network | EIP-7702 Universal Account |
-| **P1 — Gas** | ZeroDev | Gasless txs + SRA deposits |
-| **P2 — Production** | Arbitrum RPC (Alchemy) + Azure | Reliable chain reads + hosting |
-| **P3 — Demo wow** | x402 agent wallet | Autonomous micropayments |
+| Step | Action | Time |
+|------|--------|------|
+| 1 | Paste Venice + OpenAI + TinyFish into `backend/.env` | 2 min |
+| 2 | Create Magic app + Google OAuth + link them | 15 min |
+| 3 | Create Particle project (UA / 7702) | 5 min |
+| 4 | Create ZeroDev project + gas policy + copy v3 RPC | 10 min |
+| 5 | Create Alchemy app for Arbitrum RPC | 5 min |
+| 6 | Create x402 agent wallet + fund with USDC on Arbitrum | 10 min |
+| 7 | Paste all keys into Lovable env vars | 5 min |
+| 8 | Run `./scripts/start-backend.sh` + `npm run dev` | 2 min |
+| 9 | Open `/proof` — all checklist items must show ✓ Ready | 1 min |
 
 ---
 
-## How to Send Keys Securely
+## How to send keys to the agent
 
-When ready, paste each key in chat labeled by name:
+When ready, paste labeled blocks in chat (or add to Lovable / `.env` directly):
+
 ```
 VENICE_API_KEY=...
 OPENAI_API_KEY=...
+TINYFISH_API_KEY=...
 MAGIC_SECRET_KEY=...
+MAGIC_PUBLISHABLE_KEY=...
+PARTICLE_PROJECT_ID=...
+PARTICLE_CLIENT_KEY=...
+PARTICLE_APP_ID=...
+ZERODEV_PROJECT_ID=...
+ZERODEV_RPC_URL=...
+GOOGLE_CLIENT_ID=...
+ARBITRUM_RPC=...
+AGENT_WALLET_PRIVATE_KEY=...
 ```
-Or add them directly in Lovable Cloud / Azure Key Vault and tell the agent they're configured.
 
 **Never paste keys in GitHub issues or public repos.**
+
+---
+
+## Verify everything works
+
+```bash
+# Backend key check
+python3 scripts/validate-env.py
+
+# Start backend (fails if any key missing)
+./scripts/start-backend.sh
+
+# Frontend
+npm run dev
+
+# Open in browser
+# /proof  → all ✓ Ready
+# /onboard → Google sign-in
+# /dashboard → activate agent
+```
+
+---
+
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `Missing VENICE_API_KEY` etc. | Fill `backend/.env`, run validate script |
+| `Access blocked: magic.link has not completed Google verification` | Google Console → OAuth consent → set to **In production** |
+| `Particle Network not configured` | Add all 3 `VITE_PARTICLE_*` in Lovable |
+| `ARBITRUM_RPC (dedicated required)` | Replace public RPC with Alchemy URL |
+| `503 Live yield unavailable` | Check `TINYFISH_API_KEY`; TinyFish credits may be needed |
+| Backend won't start | `python3 scripts/validate-env.py` lists every missing key |

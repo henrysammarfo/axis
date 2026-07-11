@@ -17,6 +17,8 @@ dist-ssr
 *.local
 .env
 .env.*
+!.env.example
+!backend/.env.example
 backend/.env
 backend/axis.db
 backend/__pycache__

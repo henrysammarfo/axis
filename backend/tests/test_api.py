@@ -12,6 +12,7 @@ async def test_health(client):
     data = r.json()
     assert data["status"] == "ok"
     assert data["service"] == "axis-backend"
+    assert data["fully_configured"] is True
 
 
 @pytest.mark.asyncio
@@ -75,7 +76,18 @@ async def test_agent_status_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_gmx_yield_endpoint(client):
+async def test_gmx_yield_endpoint(client, monkeypatch):
+    async def mock_gmx(self):
+        return {
+            "protocol": "gmx_glp",
+            "apy": 12.5,
+            "chain": "arbitrum",
+            "risk": "medium",
+            "source": "gmx_api",
+        }
+
+    monkeypatch.setattr("routes.portfolio.YieldFetcher.get_gmx_apy", mock_gmx)
+
     r = await client.get("/api/portfolio/yields/gmx")
     assert r.status_code == 200
     data = r.json()
