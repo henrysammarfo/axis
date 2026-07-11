@@ -25,7 +25,7 @@ backend/__pycache__
 backend/.pytest_cache
 backend/**/*.pyc
 
-# Wrangler / Cloudflare
+.lovable
 .wrangler/
 .dev.vars
 

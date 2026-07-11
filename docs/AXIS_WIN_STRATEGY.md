@@ -107,7 +107,7 @@ Phase 3 — On-Chain Execution (Days 7-9)
 └── x402 micropayment (PayAI on Arbitrum)
 
 Phase 4 — Polish (Days 10-12)
-├── Wire Lovable dashboard to API
+├── Wire dashboard to API
 ├── Weekly report endpoint
 ├── Rebalance flow
 ├── Mobile responsive pass
@@ -147,7 +147,7 @@ Skip:      Anthropic (unless you get a key)
 
 ```
                     ┌─────────────────┐
-                    │  Lovable CDN    │
+                    │  Frontend CDN   │
                     │  (Frontend)     │
                     └────────┬────────┘
                              │ HTTPS
@@ -216,6 +216,6 @@ State these concretely instead of "unhackable":
 - Agent spend capped at $0.10 USDC/day for x402
 - Azure Key Vault for all secrets, zero keys in frontend
 - Rate limiting on agent endpoints (10 req/min/user)
-- CORS locked to Lovable domain only
+- CORS locked to production domain only
 - Non-custodial: user controls UA via Magic, AXIS never holds user keys
 - DeFi risk disclosure in collapsible "How It Works" section

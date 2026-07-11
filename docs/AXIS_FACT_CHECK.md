@@ -202,4 +202,4 @@ Do not claim "unhackable" to judges. Claim "defense in depth" with specific cont
 5. **P1** — PostgreSQL portfolio tracker
 6. **P1** — Real yield data (Aave subgraph + GMX API + Uniswap)
 7. **P2** — Real x402 via PayAI facilitator on Arbitrum
-8. **P2** — Wire Lovable frontend to FastAPI backend
+8. **P2** — Wire frontend to FastAPI backend

@@ -146,11 +146,11 @@ DATABASE_URL=postgresql://axis:password@localhost:5432/axis
 
 # ── App ──
 PORT=8000
-FRONTEND_URL=https://your-lovable-app.lovable.app
-CORS_ORIGINS=https://your-lovable-app.lovable.app
+FRONTEND_URL=https://axis.yourdomain.com
+CORS_ORIGINS=https://axis.yourdomain.com
 AZURE_KEY_VAULT_URL=https://your-vault.vault.azure.net/
 
-# ── Frontend (public — Vite/Lovable) ──
+# ── Frontend (public — Vite) ──
 NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY=pk_live_...
 NEXT_PUBLIC_PARTICLE_PROJECT_ID=
 NEXT_PUBLIC_PARTICLE_CLIENT_KEY=

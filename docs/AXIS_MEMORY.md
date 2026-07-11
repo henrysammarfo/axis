@@ -2,7 +2,7 @@
 
 > **Last updated:** 2026-07-07  
 > **Source of truth:** `AXIS_BUILD_GUIDE.md` + web fact-checks in `AXIS_FACT_CHECK.md`  
-> **Repo state:** Frontend brand shell exists (Lovable/TanStack Start). **No backend yet.**
+> **Repo state:** Frontend (TanStack Start). Backend FastAPI complete.
 
 ---
 
@@ -46,7 +46,7 @@ Google sign-in → invisible wallet → AI manages yield across DeFi on Arbitrum
 ## Tech Stack (Intended)
 
 ```
-Frontend:  Lovable / TanStack Start (React 19, Vite, Tailwind v4)
+Frontend:  TanStack Start (React 19, Vite, Tailwind v4)
 Backend:   FastAPI (Python) — NOT BUILT YET
 AI:        Claude/Anthropic tool-use loop (guide) — see API key alternatives
 Wallet:    Magic Labs embedded wallet (Google OAuth)
@@ -68,7 +68,7 @@ Hosting:   Azure (user has) or Railway/similar
 - `src/routes/` — brand pages: `/`, `/manifesto`, `/agent`, `/vault`, `/merch`, `/dashboard`
 - `src/lib/brandData.ts` — **mocked** portfolio/vault/agent data
 - `src/routes/dashboard.tsx` — UI shell with fake SRA address, budget slider, mocked positions
-- `.lovable/plan.md` — prmpt-style brand system (lime accent `#D8FF3C`, Inter Tight)
+- Brand system: lime accent `#D8FF3C`, Inter Tight
 
 ### What DOES NOT EXIST YET
 - `backend/` directory (FastAPI)
@@ -86,7 +86,7 @@ Hosting:   Azure (user has) or Railway/similar
 ```
 User → Google OAuth (Magic) → EOA created invisibly
      → Particle UA upgrades EOA via EIP-7702 (same address)
-     → User sets budget + risk + goal in Lovable frontend
+     → User sets budget + risk + goal in frontend
      → POST /api/agent/activate → FastAPI
      → AI agent loop:
          1. check_aave_yield / check_gmx_apy / check_uniswap_pool
@@ -149,7 +149,7 @@ Base URL: `http://localhost:8000/api` (production: Azure URL)
 - [ ] End-to-end activation flow
 - [ ] Plain-English rebalance
 - [ ] Weekly report
-- [ ] Lovable frontend wired to backend
+- [x] Frontend wired to backend
 - [ ] Mobile responsive (390px)
 - [ ] Demo video recorded
 - [ ] Public GitHub repo

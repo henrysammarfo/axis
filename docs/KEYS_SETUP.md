@@ -5,7 +5,7 @@
 
 Paste keys into:
 1. `backend/.env` (copy from `backend/.env.example`)
-2. Lovable environment variables (copy from `.env.example` at repo root)
+2. Frontend `.env` at repo root (copy from `.env.example`)
 
 Run `python3 scripts/validate-env.py` to verify backend keys before starting.
 
@@ -85,7 +85,7 @@ Docs: https://docs.tinyfish.ai
    - **Secret Key** → `MAGIC_SECRET_KEY` (backend only, never frontend)
 5. Go to **Settings → Allowed Origins & Redirects**
    - Add `http://localhost:5173`
-   - Add your Lovable URL: `https://YOUR-APP.lovable.app`
+   - Add your production URL: `https://axis.yourdomain.com`
 6. Sidebar → **Social Logins** → enable **Google**
    - You'll paste Google Client ID + Secret here in step 5 below
 
@@ -94,7 +94,7 @@ Docs: https://docs.tinyfish.ai
 MAGIC_PUBLISHABLE_KEY=pk_live_...
 MAGIC_SECRET_KEY=sk_live_...
 
-# Lovable
+# Frontend (.env)
 VITE_MAGIC_PUBLISHABLE_KEY=pk_live_...
 ```
 
@@ -118,7 +118,7 @@ Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social
    - Name: `AXIS Web`
    - **Authorized JavaScript origins:**
      - `http://localhost:5173`
-     - `https://YOUR-APP.lovable.app`
+     - `https://axis.yourdomain.com`
    - **Authorized redirect URIs:** copy the redirect URI shown in Magic dashboard under Google OAuth settings and paste it here exactly
 5. Copy **Client ID** → both env files
 6. Copy **Client Secret** → paste into Magic dashboard (Social Logins → Google) — not stored in AXIS backend
@@ -252,7 +252,7 @@ Deploy backend with `azure/deploy.bicep`. Store all secrets in **Azure Key Vault
 1. Azure Portal → **Key Vault** → create vault `axis-vault`
 2. Add each secret from `backend/.env`
 3. Azure **App Service** → Configuration → Key Vault references
-4. Set `VITE_API_URL` in Lovable to the deployed App Service URL
+4. Set `VITE_API_URL` in frontend `.env` to the deployed App Service URL
 
 ---
 
@@ -280,14 +280,14 @@ AGENT_WALLET_PRIVATE_KEY=0x...
 
 DATABASE_URL=sqlite+aiosqlite:///./axis.db
 PORT=8000
-FRONTEND_URL=https://YOUR-APP.lovable.app
-CORS_ORIGINS=http://localhost:5173,https://YOUR-APP.lovable.app
+FRONTEND_URL=https://axis.yourdomain.com
+CORS_ORIGINS=http://localhost:5173,https://axis.yourdomain.com
 ENVIRONMENT=development
 ```
 
 ---
 
-## Complete Lovable / frontend env
+## Complete frontend `.env`
 
 ```bash
 VITE_API_URL=http://localhost:8000
@@ -313,7 +313,7 @@ VITE_ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 | 4 | Create ZeroDev project + gas policy + copy v3 RPC | 10 min |
 | 5 | Create Alchemy app for Arbitrum RPC | 5 min |
 | 6 | Create x402 agent wallet + fund with USDC on Arbitrum | 10 min |
-| 7 | Paste all keys into Lovable env vars | 5 min |
+| 7 | Paste all keys into frontend `.env` | 5 min |
 | 8 | Run `./scripts/start-backend.sh` + `npm run dev` | 2 min |
 | 9 | Open `/proof` — all checklist items must show ✓ Ready | 1 min |
 
@@ -321,7 +321,7 @@ VITE_ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 
 ## How to send keys to the agent
 
-When ready, paste labeled blocks in chat (or add to Lovable / `.env` directly):
+When ready, paste labeled blocks in chat (or add to `backend/.env` and frontend `.env` directly):
 
 ```
 VENICE_API_KEY=...
@@ -369,7 +369,7 @@ npm run dev
 |-------|-----|
 | `Missing VENICE_API_KEY` etc. | Fill `backend/.env`, run validate script |
 | `Access blocked: magic.link has not completed Google verification` | Google Console → OAuth consent → set to **In production** |
-| `Particle Network not configured` | Add all 3 `VITE_PARTICLE_*` in Lovable |
+| `Particle Network not configured` | Add all 3 `VITE_PARTICLE_*` in frontend `.env` |
 | `ARBITRUM_RPC (dedicated required)` | Replace public RPC with Alchemy URL |
 | `503 Live yield unavailable` | Check `TINYFISH_API_KEY`; TinyFish credits may be needed |
 | Backend won't start | `python3 scripts/validate-env.py` lists every missing key |

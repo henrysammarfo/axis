@@ -3,7 +3,7 @@
 **Track:** Universal Accounts Track (primary) + Arbitrum Bounty + Magic Labs Bonus + ZeroDev Subtrack  
 **Prize Target:** UA 1st $2,500 + Arbitrum $2,000 + Magic Labs $500 + ZeroDev $500 = **$5,500**  
 **Stack:** Particle Network UA SDK + EIP-7702 + Magic Labs + ZeroDev SRA + Arbitrum + Claude Agent SDK + x402  
-**Frontend:** Built in Lovable — connects to FastAPI backend
+**Frontend:** TanStack Start — connects to FastAPI backend
 
 ---
 
@@ -68,7 +68,7 @@ axis/
 │   │   └── portfolio_tracker.py    ← track positions + P&L
 │   └── models.py                   ← SQLAlchemy models
 │
-└── frontend_spec.md                ← API spec for Lovable
+└── frontend_spec.md                ← API spec for frontend
 ```
 
 ---
@@ -121,7 +121,7 @@ DATABASE_URL=postgresql://axis:password@localhost:5432/axis
 # App
 PORT=8000
 FRONTEND_URL=http://localhost:3000
-CORS_ORIGINS=http://localhost:3000,https://your-lovable-app.lovable.app
+CORS_ORIGINS=http://localhost:3000,https://axis.yourdomain.com
 ```
 
 ---
@@ -698,7 +698,7 @@ class X402Client:
 ```python
 """
 AXIS Agent API Routes
-The Lovable frontend calls these to trigger and monitor agent actions.
+The frontend calls these to trigger and monitor agent actions.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -876,7 +876,7 @@ class PortfolioTracker:
 
 ---
 
-## FRONTEND SPEC FOR LOVABLE
+## FRONTEND SPEC
 
 ```
 AXIS Frontend — API Base: http://localhost:8000/api
@@ -934,7 +934,7 @@ MOBILE:
 ## UNIVERSAL ACCOUNTS + EIP-7702 SETUP
 
 ```typescript
-// Frontend (in Lovable) — Particle Network UA SDK integration
+// Frontend — Particle Network UA SDK integration
 // This runs in the browser
 
 import { SmartAccount } from '@particle-network/aa';
@@ -1051,7 +1051,7 @@ export async function getSmartRoutingAddress(uaAddress: string) {
 □ Agent activation end-to-end — budget set → positions allocated → explanation shown
 □ Plain English rebalance — "safer positions" instruction works
 □ Weekly report generation working
-□ Lovable frontend: Google login → dashboard → positions → rebalance input
+□ Frontend: Google login → dashboard → positions → rebalance input
 □ Mobile responsive (390px)
 □ Demo video recorded (90 seconds for Arbitrum, 3-5 mins for UA track)
 □ GitHub repo public
