@@ -29,12 +29,9 @@ async def test_live_venice_chat(live_settings):
 @pytest.mark.asyncio
 async def test_live_aave_yield_fetch(live_settings):
     fetcher = YieldFetcher()
-    try:
-        data = await fetcher.get_aave_apy("USDC")
-    except Exception as exc:
-        pytest.skip(f"Aave API unavailable on Sepolia: {exc}")
-    assert "supply_apy" in data
-    assert data["supply_apy"] >= 0
+    data = await fetcher.get_aave_apy("USDC")
+    assert data["source"] == "aave_onchain"
+    assert data["supply_apy"] > 0
 
 
 @pytest.mark.live
