@@ -224,19 +224,10 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
     }
 
     const ua = await provisionUniversalAccount(ethAddress);
-    let sraAddress: string | undefined;
-
-    requireEnv("VITE_ZERODEV_PROJECT_ID");
-    requireEnv("VITE_ZERODEV_RPC_URL");
-    sraAddress = await createSmartRoutingAddress(ua.address);
-    if (!sraAddress) {
-      throw new Error("Failed to create Smart Routing Address.");
-    }
+    const sraAddress = await createSmartRoutingAddress(ua.address);
 
     auth = await axisApi.register(didToken, ua.address, sraAddress, info.email ?? undefined);
-  } else if (!auth.sra_address) {
-    requireEnv("VITE_ZERODEV_PROJECT_ID");
-    requireEnv("VITE_ZERODEV_RPC_URL");
+  } else if (!auth.sra_address && arbitrumChainId() !== ARBITRUM_SEPOLIA_CHAIN_ID) {
     const sraAddress = await createSmartRoutingAddress(auth.ua_address);
     if (sraAddress) {
       auth = await axisApi.register(didToken, auth.ua_address, sraAddress, info.email ?? undefined);
@@ -291,40 +282,42 @@ async function provisionUniversalAccount(ownerAddress: string): Promise<{ addres
 }
 
 async function createSmartRoutingAddress(owner: string): Promise<string | undefined> {
-  const { createSmartRoutingAddress } = await import("@zerodev/smart-routing-address");
-  const { arbitrum, arbitrumSepolia, base, baseSepolia, optimism, sepolia } = await import(
-    "viem/chains"
-  );
+  const { getAddress } = await import("viem");
 
-  const isTestnet = arbitrumChainId() === ARBITRUM_SEPOLIA_CHAIN_ID;
+  let checksummedOwner: `0x${string}`;
+  try {
+    checksummedOwner = getAddress(owner);
+  } catch {
+    throw new Error("Wallet address is invalid. Sign out and sign in again.");
+  }
 
-  // ZeroDev SRA only supports specific chains — optimismSepolia (11155420) is not one of them.
-  const { smartRoutingAddress } = await createSmartRoutingAddress(
-    isTestnet
-      ? {
-          owner,
-          destChain: arbitrumSepolia,
-          srcTokens: [
-            { tokenType: "USDC", chain: baseSepolia },
-            { tokenType: "USDC", chain: arbitrumSepolia },
-            { tokenType: "USDC", chain: sepolia },
-          ],
-          actions: { USDC: { action: [], fallBack: [] } },
-          slippage: 50,
-        }
-      : {
-          owner,
-          destChain: arbitrum,
-          srcTokens: [
-            { tokenType: "USDC", chain: base },
-            { tokenType: "USDC", chain: arbitrum },
-            { tokenType: "USDC", chain: optimism },
-          ],
-          actions: { USDC: { action: [], fallBack: [] } },
-          slippage: 50,
-        },
-  );
-  return smartRoutingAddress;
+  // ZeroDev's public SRA API rejects testnet configs (JSON-RPC Invalid params).
+  // On Arbitrum Sepolia, fund the UA (Magic EOA) directly instead of using an SRA.
+  if (arbitrumChainId() === ARBITRUM_SEPOLIA_CHAIN_ID) {
+    return undefined;
+  }
+
+  try {
+    const { createSmartRoutingAddress } = await import("@zerodev/smart-routing-address");
+    const { arbitrum, base, optimism } = await import("viem/chains");
+
+    const { smartRoutingAddress } = await createSmartRoutingAddress({
+      owner: checksummedOwner,
+      destChain: arbitrum,
+      srcTokens: [
+        { tokenType: "USDC", chain: base },
+        { tokenType: "USDC", chain: arbitrum },
+        { tokenType: "USDC", chain: optimism },
+      ],
+      actions: { USDC: { action: [], fallBack: [] } },
+      slippage: 50,
+      allowPartialRoutes: true,
+    });
+    return smartRoutingAddress;
+  } catch (error) {
+    console.warn("[AXIS] Smart Routing Address setup skipped:", error);
+    return undefined;
+  }
 }
 
 export async function logout(): Promise<void> {
