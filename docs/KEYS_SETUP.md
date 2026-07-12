@@ -144,8 +144,9 @@ Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social
    - **Client Key** → `PARTICLE_CLIENT_KEY` / `VITE_PARTICLE_CLIENT_KEY`
 4. Go to **Applications** → **+ Add Web App** (select **Web** platform):
    - **App Name:** `AXIS`
-   - **Domain:** `localhost` only — **not** `http://localhost:5173` (no scheme, no port)
-   - Particle also accepts placeholders like `demo.com` for hackathon dev
+   - **Domain:** required — use reverse-domain style, e.g. `com.axis.web` or `axis.local`
+   - **Do not use** `http://localhost:5173` (no `http://`, no port)
+   - Particle docs also accept placeholders like `demo.com` for hackathon dev
    - After save, copy the **App ID** (UUID) → `PARTICLE_APP_ID` / `VITE_PARTICLE_APP_ID`
 5. In project settings, ensure **Universal Accounts** is enabled
 6. Use **EIP-7702 mode** (default in UA SDK v2) — EOA upgrades in-place
