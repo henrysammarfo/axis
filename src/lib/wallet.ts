@@ -68,6 +68,16 @@ export function walletConfigErrors(): string[] {
   return missingFrontendEnv();
 }
 
+/** OAuth callback URL — must match Magic dashboard redirect URI allowlist exactly. */
+export function magicOAuthRedirectURI(): string {
+  const override = import.meta.env.VITE_MAGIC_REDIRECT_URI?.toString().trim();
+  if (override) return override;
+  if (typeof window === "undefined") {
+    throw new Error("OAuth redirect URI requires a browser context.");
+  }
+  return `${window.location.origin}/onboard`;
+}
+
 /** Start Google OAuth — redirects away from the app */
 export async function loginWithGoogle(): Promise<never> {
   const magic = createMagic();
@@ -76,7 +86,10 @@ export async function loginWithGoogle(): Promise<never> {
     await finalizeSession(magic);
     return undefined as never;
   }
-  await magic.oauth2.loginWithRedirect({ provider: "google" });
+  await magic.oauth2.loginWithRedirect({
+    provider: "google",
+    redirectURI: magicOAuthRedirectURI(),
+  });
   throw new Error("Redirecting to Google sign-in…");
 }
 

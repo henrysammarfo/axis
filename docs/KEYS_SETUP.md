@@ -85,8 +85,10 @@ Docs: https://docs.tinyfish.ai
    - **Publishable API Key** → `MAGIC_PUBLISHABLE_KEY` + `VITE_MAGIC_PUBLISHABLE_KEY`
    - **Secret Key** → `MAGIC_SECRET_KEY` (backend only, never frontend)
 5. Go to **Settings → Allowed Origins & Redirects**
-   - Add `http://localhost:5173`
-   - Add your production URL: `https://axis.yourdomain.com`
+   - **Allowed Origins:** `http://localhost:5173` (and your production origin, e.g. `https://axis.yourdomain.com`)
+   - **Redirect URI allowlist** (exact paths — required for Google OAuth):
+     - `http://localhost:5173/onboard`
+     - `https://axis.yourdomain.com/onboard` (production)
 6. Sidebar → **Social Logins** → enable **Google**
    - You'll paste Google Client ID + Secret here in step 5 below
 
@@ -97,6 +99,8 @@ MAGIC_SECRET_KEY=sk_live_...
 
 # Frontend (.env)
 VITE_MAGIC_PUBLISHABLE_KEY=pk_live_...
+# Optional — defaults to {origin}/onboard when unset
+# VITE_MAGIC_REDIRECT_URI=http://localhost:5173/onboard
 ```
 
 Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social-providers/google
