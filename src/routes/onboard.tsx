@@ -7,6 +7,7 @@ import {
   resumeSession,
   getStoredSession,
   isWalletConfigured,
+  magicOAuthRedirectURI,
 } from "../lib/wallet";
 import { useAxisConfig } from "../hooks/useAxis";
 import { isAuthenticated } from "../lib/auth";
@@ -42,6 +43,8 @@ function Onboard() {
   const [risk, setRisk] = useState<(typeof RISKS)[number]>("moderate");
   const [goal, setGoal] = useState<string>(GOALS[0]);
   const session = getStoredSession();
+  const oauthRedirectUri =
+    typeof window !== "undefined" ? magicOAuthRedirectURI() : "http://localhost:5173/onboard";
 
   useEffect(() => {
     handleOAuthRedirect()
@@ -70,7 +73,11 @@ function Onboard() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Login failed";
       if (!msg.includes("Redirecting")) {
-        setError(msg);
+        const hint =
+          msg.includes("redirect_uri") || msg.includes("allowlist")
+            ? ` Add ${oauthRedirectUri} to Google Authorized redirect URIs and Magic redirect allowlist.`
+            : "";
+        setError(msg + hint);
       }
     } finally {
       setLoading(false);
@@ -113,6 +120,21 @@ function Onboard() {
                 <div className="border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-yellow-200/80">
                   Configure wallet keys before signing in. See{" "}
                   <code className="text-xs">docs/KEYS_SETUP.md</code>
+                </div>
+              )}
+
+              {isWalletConfigured() && (
+                <div className="border border-white/10 bg-white/5 p-4 text-xs text-white/50 space-y-2">
+                  <p className="uppercase tracking-widest text-white/40">OAuth setup (Google + Magic)</p>
+                  <p>
+                    Add this exact redirect URI to Google Cloud Console → OAuth client →{" "}
+                    <strong className="text-white/70">Authorized redirect URIs</strong> and Magic
+                    dashboard → <strong className="text-white/70">Redirect URI allowlist</strong>:
+                  </p>
+                  <code className="block text-[11px] text-lime-300/90 break-all">{oauthRedirectUri}</code>
+                  <p>
+                    JavaScript origin: <code className="text-white/70">{typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"}</code>
+                  </p>
                 </div>
               )}
 

@@ -121,12 +121,19 @@ Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social
 4. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
    - Type: **Web application**
    - Name: `AXIS Web`
-   - **Authorized JavaScript origins:**
+   - **Authorized JavaScript origins** (must match how you open the app in the browser):
      - `http://localhost:5173`
+     - `http://127.0.0.1:5173` (only if you browse via 127.0.0.1 instead of localhost)
      - `https://axis.yourdomain.com`
-   - **Authorized redirect URIs:** copy the redirect URI shown in Magic dashboard under Google OAuth settings and paste it here exactly
+   - **Authorized redirect URIs** — for AXIS `loginWithRedirect`, use your **app callback URL**, not Magic's dashboard callback:
+     - `http://localhost:5173/onboard`
+     - `http://127.0.0.1:5173/onboard` (only if you browse via 127.0.0.1)
+     - `https://axis.yourdomain.com/onboard`
+     - Do **not** use Magic's "Magic Login Widget" redirect URI here — that is only for `connectWithUI`.
 5. Copy **Client ID** → both env files
 6. Copy **Client Secret** → paste into Magic dashboard (Social Logins → Google) — not stored in AXIS backend
+
+**Troubleshooting `redirect_uri_mismatch`:** Google rejected the URI sent by the app. Open `/onboard` and copy the redirect URI shown in the OAuth setup box — add that exact string to Google **Authorized redirect URIs**. Also add the same URI to Magic **Redirect URI allowlist** and use the same Google Client ID in Magic + `.env`.
 
 ```bash
 GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
