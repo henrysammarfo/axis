@@ -59,16 +59,34 @@ class AuthService:
         try:
             magic = _magic_admin_client()
             magic.Token.validate(did_token)
-            response = magic.User.get_metadata_by_token(did_token)
-            data = response.data if hasattr(response, "data") else response
+            issuer = magic.Token.get_issuer(did_token)
+            public_address = magic.Token.get_public_address(did_token)
+
+            email: str | None = None
+            try:
+                response = magic.User.get_metadata_by_token(did_token)
+                data = response.data if hasattr(response, "data") else response
+                email = data.get("email")
+                issuer = data.get("issuer") or issuer
+                public_address = data.get("public_address") or public_address
+            except APIError as exc:
+                # Token is already cryptographically valid; metadata lookup is optional.
+                logger.warning("Magic metadata lookup failed (%s): %s", getattr(exc, "status_code", "?"), exc)
+
             return {
                 "valid": True,
-                "issuer": data.get("issuer"),
-                "email": data.get("email"),
-                "public_address": data.get("public_address"),
+                "issuer": issuer,
+                "email": email,
+                "public_address": public_address,
             }
         except (DIDTokenExpired, DIDTokenInvalid, DIDTokenMalformed, ExpectedBearerStringError) as exc:
             logger.info("Magic token rejected: %s", exc)
+            message = str(exc) or "Invalid or expired sign-in."
+            if "aud" in message.lower() or "secret key" in message.lower():
+                return {
+                    "valid": False,
+                    "error": "MAGIC_SECRET_KEY does not match VITE_MAGIC_PUBLISHABLE_KEY. Use keys from the same Magic app.",
+                }
             return {"valid": False, "error": "Invalid or expired sign-in. Please sign in again."}
         except APIConnectionError as exc:
             logger.error("Magic API connection failed: %s", exc)

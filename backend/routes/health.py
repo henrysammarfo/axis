@@ -7,6 +7,24 @@ from config import get_settings
 router = APIRouter(tags=["health"])
 
 
+def _magic_auth_status() -> dict:
+    settings = get_settings()
+    if not settings.magic_secret_key:
+        return {"ready": False, "mode": "unconfigured"}
+    try:
+        from services.auth_service import _magic_admin_client
+
+        _magic_admin_client()
+        publishable_suffix = settings.magic_publishable_key[-8:] if settings.magic_publishable_key else None
+        return {
+            "ready": True,
+            "mode": "magic-admin",
+            "publishable_suffix": publishable_suffix,
+        }
+    except Exception as exc:
+        return {"ready": False, "mode": "magic-admin", "error": str(exc)[:120]}
+
+
 @router.get("/health")
 async def health():
     settings = get_settings()
@@ -36,6 +54,7 @@ async def config_status():
         },
         "wallet": {
             "magic": bool(settings.magic_secret_key and settings.magic_publishable_key),
+            "magic_auth": _magic_auth_status(),
             "particle": bool(
                 settings.particle_project_id and settings.particle_client_key and settings.particle_app_id
             ),

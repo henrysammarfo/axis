@@ -203,14 +203,18 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
   };
 
   try {
-    auth = await axisApi.register(didToken);
+    auth = await axisApi.register(didToken, undefined, undefined, info.email ?? undefined);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Registration failed";
-    throw new Error(
-      message.includes("Magic API")
-        ? "Sign-in verification failed. Check backend MAGIC_SECRET_KEY matches your Magic app."
-        : message,
-    );
+    if (message.includes("MAGIC_SECRET_KEY") || message.includes("does not match")) {
+      throw new Error(message);
+    }
+    if (message.includes("Magic API") || message.includes("Invalid or expired")) {
+      throw new Error(
+        "Sign-in verification failed. Restart the backend (pip install -r backend/requirements.txt), then confirm MAGIC_SECRET_KEY matches VITE_MAGIC_PUBLISHABLE_KEY from the same Magic app.",
+      );
+    }
+    throw new Error(message);
   }
 
   if (!auth.ua_address) {
@@ -233,13 +237,13 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
       throw new Error("Failed to create Smart Routing Address.");
     }
 
-    auth = await axisApi.register(didToken, ua.address, sraAddress);
+    auth = await axisApi.register(didToken, ua.address, sraAddress, info.email ?? undefined);
   } else if (!auth.sra_address) {
     requireEnv("VITE_ZERODEV_PROJECT_ID");
     requireEnv("VITE_ZERODEV_RPC_URL");
     const sraAddress = await createSmartRoutingAddress(auth.ua_address);
     if (sraAddress) {
-      auth = await axisApi.register(didToken, auth.ua_address, sraAddress);
+      auth = await axisApi.register(didToken, auth.ua_address, sraAddress, info.email ?? undefined);
     }
   }
 

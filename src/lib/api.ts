@@ -75,7 +75,7 @@ export const axisApi = {
       { method: "POST", body: JSON.stringify({ did_token: didToken }) },
     ),
 
-  register: (didToken: string, uaAddress?: string, sraAddress?: string) =>
+  register: (didToken: string, uaAddress?: string, sraAddress?: string, email?: string) =>
     request<{ user_id: string; email?: string; ua_address?: string; sra_address?: string }>(
       "/api/auth/register",
       {
@@ -84,6 +84,7 @@ export const axisApi = {
           did_token: didToken,
           ua_address: uaAddress,
           sra_address: sraAddress,
+          email,
         }),
       },
     ),

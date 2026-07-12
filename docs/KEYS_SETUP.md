@@ -103,6 +103,13 @@ VITE_MAGIC_PUBLISHABLE_KEY=pk_live_...
 # VITE_MAGIC_REDIRECT_URI=http://localhost:5173/onboard
 ```
 
+After pulling auth fixes, restart the backend so it loads `magic-admin`:
+
+```bash
+pip install -r backend/requirements.txt
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
 Docs: https://docs.magic.link/embedded-wallets/authentication/login/oauth/social-providers/google
 
 ---

@@ -20,6 +20,7 @@ class RegisterRequest(BaseModel):
     did_token: str
     ua_address: str | None = None
     sra_address: str | None = None
+    email: str | None = None
 
 
 @router.post("/verify")
@@ -52,7 +53,7 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
 
     user = await tracker.ensure_user(
         user_id=user_id,
-        email=result.get("email"),
+        email=result.get("email") or request.email,
         ua_address=request.ua_address,
         sra_address=request.sra_address,
     )
