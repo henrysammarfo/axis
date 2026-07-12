@@ -10,6 +10,7 @@ const REQUIRED_FRONTEND_ENV = [
   "VITE_ZERODEV_RPC_URL",
   "VITE_GOOGLE_CLIENT_ID",
   "VITE_ARBITRUM_RPC_URL",
+  "VITE_ARBITRUM_CHAIN_ID",
 ] as const;
 
 export type FrontendEnvKey = (typeof REQUIRED_FRONTEND_ENV)[number];

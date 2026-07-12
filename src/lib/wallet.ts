@@ -6,6 +6,7 @@
 import { Magic } from "magic-sdk";
 import { OAuthExtension } from "@magic-ext/oauth2";
 import { axisApi } from "./api";
+import { arbitrumChainId } from "./chain";
 import { isFrontendFullyConfigured, missingFrontendEnv } from "./env";
 
 export type WalletSession = {
@@ -32,7 +33,7 @@ function createMagic(): Magic {
     extensions: [new OAuthExtension()],
     network: {
       rpcUrl: requireEnv("VITE_ARBITRUM_RPC_URL"),
-      chainId: 42161,
+      chainId: arbitrumChainId(),
     },
   });
 }
@@ -151,7 +152,7 @@ async function upgradeToUniversalAccount(magic: Magic) {
     clientKey: requireEnv("VITE_PARTICLE_CLIENT_KEY"),
     appId: requireEnv("VITE_PARTICLE_APP_ID"),
     eip7702: true,
-    chainId: 42161,
+    chainId: arbitrumChainId(),
   });
 
   const address = await ua.getAddress();
@@ -160,20 +161,18 @@ async function upgradeToUniversalAccount(magic: Magic) {
 
 async function createSmartRoutingAddress(owner: string): Promise<string | undefined> {
   const { createSmartRoutingAddress } = await import("@zerodev/smart-routing-address");
-  const { arbitrum, optimism, base, mainnet } = await import("viem/chains");
+  const { arbitrumSepolia, baseSepolia, optimismSepolia } = await import("viem/chains");
 
   const { smartRoutingAddress } = await createSmartRoutingAddress({
     owner,
-    destChain: arbitrum,
+    destChain: arbitrumSepolia,
     srcTokens: [
-      { tokenType: "USDC", chain: optimism },
-      { tokenType: "USDC", chain: base },
-      { tokenType: "USDC", chain: arbitrum },
-      { tokenType: "NATIVE", chain: mainnet },
+      { tokenType: "USDC", chain: baseSepolia },
+      { tokenType: "USDC", chain: optimismSepolia },
+      { tokenType: "USDC", chain: arbitrumSepolia },
     ],
     actions: {
       USDC: { action: [], fallBack: [] },
-      NATIVE: { action: [], fallBack: [] },
     },
     slippage: 50,
   });

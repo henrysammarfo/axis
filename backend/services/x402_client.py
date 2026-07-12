@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
+from chain_config import x402_chain_id
 from models import X402Spend
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,11 @@ class X402Client:
                         "X-Agent-Address": self.agent_address,
                         "Content-Type": "application/json",
                     },
-                    json={"query": query, "user_id": user_id, "chain": "eip155:42161"},
+                    json={
+                        "query": query,
+                        "user_id": user_id,
+                        "chain": x402_chain_id(self.settings.arbitrum_chain_id),
+                    },
                 )
                 if r.status_code == 200:
                     await self._log_spend(user_id, query, paid=True)
@@ -112,7 +117,8 @@ class X402Client:
 
     def _build_payment_header(self, query: str) -> str:
         memo = f"AXIS market intelligence: {query[:50]}"
-        return f"x402 amount={int(COST_PER_QUERY * 1e6)} currency=USDC chain=eip155:42161 memo={memo}"
+        chain = x402_chain_id(self.settings.arbitrum_chain_id)
+        return f"x402 amount={int(COST_PER_QUERY * 1e6)} currency=USDC chain={chain} memo={memo}"
 
     async def _within_daily_cap(self, user_id: str) -> bool:
         if not self.db:

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PUBLIC_ARBITRUM_RPC = "https://arb1.arbitrum.io/rpc"
+from chain_config import ARBITRUM_SEPOLIA_CHAIN_ID, PUBLIC_ARBITRUM_RPCS
 
 
 class Settings(BaseSettings):
@@ -27,15 +27,16 @@ class Settings(BaseSettings):
     particle_project_id: str = ""
     particle_client_key: str = ""
     particle_app_id: str = ""
+    particle_server_key: str = ""
     zerodev_project_id: str = ""
     zerodev_rpc_url: str = ""
     zerodev_bundler_url: str = ""
     zerodev_paymaster_url: str = ""
     google_client_id: str = ""
 
-    # Chain (dedicated RPC required — no public endpoint)
-    arbitrum_rpc: str = PUBLIC_ARBITRUM_RPC
-    arbitrum_chain_id: int = 42161
+    # Chain (dedicated RPC required — no public endpoint; Sepolia default)
+    arbitrum_rpc: str = "https://sepolia-rollup.arbitrum.io/rpc"
+    arbitrum_chain_id: int = ARBITRUM_SEPOLIA_CHAIN_ID
 
     # x402 (required)
     x402_facilitator_url: str = "https://facilitator.payai.network"
@@ -86,7 +87,9 @@ class Settings(BaseSettings):
     @property
     def chain_configured(self) -> bool:
         rpc = self.arbitrum_rpc.strip().rstrip("/")
-        return rpc != PUBLIC_ARBITRUM_RPC.rstrip("/") and len(rpc) > 20
+        if rpc in {u.rstrip("/") for u in PUBLIC_ARBITRUM_RPCS}:
+            return False
+        return len(rpc) > 20
 
     @property
     def intelligence_configured(self) -> bool:

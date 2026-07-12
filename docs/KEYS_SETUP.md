@@ -1,6 +1,7 @@
 # AXIS — Complete API Keys Setup (Nothing Optional)
 
 > **Last updated:** July 2026  
+> **Default network:** Arbitrum Sepolia (`421614`) — matches x402 testnet + hackathon demos.
 > AXIS will **not start** until every key below is configured. No mocks, no fallbacks, no public RPC.
 
 Paste keys into:
@@ -166,12 +167,12 @@ Docs: https://developers.particle.network/universal-accounts/ua-reference/web/ov
 
 1. Go to https://dashboard.zerodev.app
 2. Sign up → **Create Project**
-3. Enable **Arbitrum One** (chain ID `42161`) on the project
+3. Enable **Arbitrum Sepolia** (chain ID `421614`) on the project
 4. Copy **Project ID** → `ZERODEV_PROJECT_ID` / `VITE_ZERODEV_PROJECT_ID`
 5. Go to **Gas Policies** → create policy → enable **Sponsor all transactions** (or scoped policy)
-6. From project home, copy the **v3 RPC URL** for Arbitrum One:
+6. From project home, copy the **v3 RPC URL** for Arbitrum Sepolia:
    ```
-   https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/42161
+   https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/421614
    ```
    This single URL is used for **both bundler and paymaster** (ZeroDev v3).
 

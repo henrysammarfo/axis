@@ -14,9 +14,9 @@ _TEST_ENV = {
     "PARTICLE_CLIENT_KEY": "test-particle-client",
     "PARTICLE_APP_ID": "test-particle-app",
     "ZERODEV_PROJECT_ID": "test-zerodev-project",
-    "ZERODEV_RPC_URL": "https://rpc.zerodev.app/api/v3/test-zerodev-project/chain/42161",
+    "ZERODEV_RPC_URL": "https://rpc.zerodev.app/api/v3/test-zerodev-project/chain/421614",
     "GOOGLE_CLIENT_ID": "test-google-client-id.apps.googleusercontent.com",
-    "ARBITRUM_RPC": "https://arb-mainnet.g.alchemy.com/v2/test-alchemy-key",
+    "ARBITRUM_RPC": "https://arb-sepolia.g.alchemy.com/v2/test-alchemy-key",
     "AGENT_WALLET_PRIVATE_KEY": "0x" + "a" * 64,
     "X402_FACILITATOR_URL": "https://facilitator.payai.network",
 }

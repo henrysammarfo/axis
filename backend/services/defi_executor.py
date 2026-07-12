@@ -10,6 +10,7 @@ import httpx
 from web3 import Web3
 
 from config import get_settings
+from chain_config import chain_label
 from services.yield_fetcher import YieldFetcher
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ class DeFiExecutor:
                             "amount_usdc": amount_usdc,
                             "action": action,
                             "tx_hash": data["tx_hash"],
-                            "chain": "arbitrum",
+                            "chain": chain_label(self.settings.arbitrum_chain_id),
                         }
         except Exception as exc:
             logger.warning("ZeroDev execution relay failed: %s", exc)
@@ -168,5 +169,5 @@ class DeFiExecutor:
             "asset": asset,
             "amount_usdc": amount_usdc,
             "action": action,
-            "chain": "arbitrum",
+            "chain": chain_label(self.settings.arbitrum_chain_id),
         }

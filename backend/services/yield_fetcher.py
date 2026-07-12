@@ -11,7 +11,10 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-ARBITRUM_AAVE_POOL = "0x794a61358D6845594F94dc1DB02A252b5b4814aD"
+AAVE_MARKET_BY_CHAIN = {
+    42161: "proto_arbitrum_v3",
+    421614: "proto_arbitrum_sepolia_v3",
+}
 AAVE_ASSETS = {
     "USDC": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
     "USDT": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
@@ -29,6 +32,9 @@ class YieldFetcher:
         self.settings = get_settings()
         if not self.settings.tinyfish_api_key:
             raise RuntimeError("TINYFISH_API_KEY is required for yield data")
+        self.chain_id = self.settings.arbitrum_chain_id
+        self.chain_name = "arbitrum-sepolia" if self.chain_id == 421614 else "arbitrum"
+        self.aave_market = AAVE_MARKET_BY_CHAIN.get(self.chain_id, "proto_arbitrum_sepolia_v3")
 
     async def get_aave_apy(self, asset: str) -> dict[str, Any]:
         asset = asset.upper()
@@ -54,7 +60,7 @@ class YieldFetcher:
                                 "asset": asset,
                                 "supply_apy": round(apy, 2),
                                 "protocol": "aave_v3",
-                                "chain": "arbitrum",
+                                "chain": self.chain_name,
                                 "source": "aave_api",
                             }
         except Exception as exc:
@@ -65,7 +71,7 @@ class YieldFetcher:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.get(
                     "https://aave-api-v2.aave.com/data/markets-data",
-                    params={"poolId": "arbitrum"},
+                    params={"poolId": self.chain_name},
                 )
                 if r.status_code == 200:
                     for reserve in r.json().get("reserves", []):
@@ -76,7 +82,7 @@ class YieldFetcher:
                                 "supply_apy": round(apy, 2),
                                 "liquidity_usd": reserve.get("totalLiquidity"),
                                 "protocol": "aave_v3",
-                                "chain": "arbitrum",
+                                "chain": self.chain_name,
                                 "source": "aave_legacy_api",
                             }
         except Exception as exc:
@@ -92,6 +98,12 @@ class YieldFetcher:
         )
 
     async def get_gmx_apy(self) -> dict[str, Any]:
+        if self.chain_id == 421614:
+            scraped = await self._tinyfish_gmx_apy()
+            if scraped:
+                return scraped
+            raise YieldDataUnavailable("GMX APR is not on Arbitrum Sepolia; TinyFish scrape failed")
+
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.get("https://arbitrum-api.gmxinfra.io/apr")
@@ -102,7 +114,7 @@ class YieldFetcher:
                         return {
                             "protocol": "gmx_glp",
                             "apy": round(glp_apr, 2),
-                            "chain": "arbitrum",
+                            "chain": self.chain_name,
                             "risk": "medium",
                             "source": "gmx_api",
                             "note": "GLP earns from protocol trading fees",
@@ -160,7 +172,7 @@ class YieldFetcher:
                                 "estimated_apy": round(weekly_apy, 2),
                                 "tvl_usd": tvl,
                                 "protocol": "uniswap_v3",
-                                "chain": "arbitrum",
+                                "chain": self.chain_name,
                                 "source": "subgraph",
                             }
             except Exception as exc:
@@ -177,7 +189,7 @@ class YieldFetcher:
                     "https://agent.tinyfish.ai/v1/automation/run",
                     headers={"X-API-Key": self.settings.tinyfish_api_key},
                     json={
-                        "url": "https://app.aave.com/markets/?marketName=proto_arbitrum_v3",
+                        "url": f"https://app.aave.com/markets/?marketName={self.aave_market}",
                         "goal": f"Find the supply APY for {asset} on Arbitrum and return JSON: {{\"supply_apy\": number}}",
                     },
                 )
@@ -193,7 +205,7 @@ class YieldFetcher:
                             "asset": asset,
                             "supply_apy": apy,
                             "protocol": "aave_v3",
-                            "chain": "arbitrum",
+                            "chain": self.chain_name,
                             "source": "tinyfish",
                         }
         except Exception as exc:
@@ -222,7 +234,7 @@ class YieldFetcher:
                         return {
                             "protocol": "gmx_glp",
                             "apy": apy,
-                            "chain": "arbitrum",
+                            "chain": self.chain_name,
                             "risk": "medium",
                             "source": "tinyfish",
                         }
