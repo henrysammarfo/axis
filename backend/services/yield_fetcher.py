@@ -45,12 +45,16 @@ class YieldFetcher:
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.get(
+                r = await client.post(
                     "https://api.v3.aave.com/graphql",
-                    params={"query": self._aave_query(asset)},
+                    json={"query": self._aave_query(asset)},
                 )
                 if r.status_code == 200:
-                    reserves = r.json().get("data", {}).get("reserves", [])
+                    payload = r.json()
+                    markets = payload.get("data", {}).get("markets", [])
+                    reserves = markets[0].get("reserves", []) if markets else []
+                    if not reserves:
+                        reserves = payload.get("data", {}).get("reserves", [])
                     for reserve in reserves:
                         if reserve.get("symbol", "").upper() == asset:
                             apy = float(reserve.get("supplyAPY", 0) or 0)
@@ -243,11 +247,14 @@ class YieldFetcher:
         return None
 
     def _aave_query(self, asset: str) -> str:
+        market = self.aave_market
         return f"""
         {{
-          reserves(where: {{symbol: "{asset}"}}) {{
-            symbol
-            supplyAPY
+          markets(request: {{ address: "{market}" }}) {{
+            reserves(where: {{ symbol: "{asset}" }}) {{
+              symbol
+              supplyAPY
+            }}
           }}
         }}
         """

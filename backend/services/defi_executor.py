@@ -74,10 +74,14 @@ class DeFiExecutor:
             user_id,
         )
 
-        estimated_apy = await self._estimate_apy(protocol, asset)
-        daily_yield = (amount_usdc * estimated_apy / 100) / 365
+        estimated_apy = 0.0
+        try:
+            estimated_apy = await self._estimate_apy(protocol, asset)
+        except Exception as exc:
+            logger.warning("APY estimate unavailable, continuing execution: %s", exc)
 
         tx_result = await self._execute_onchain(protocol, asset, amount_usdc, action)
+        daily_yield = (amount_usdc * estimated_apy / 100) / 365 if estimated_apy else 0.0
         if tx_result.get("success") and tx_result.get("tx_hash"):
             return {
                 **tx_result,
@@ -153,6 +157,34 @@ class DeFiExecutor:
                         }
         except Exception as exc:
             logger.warning("ZeroDev execution relay failed: %s", exc)
+
+        # Agent-wallet direct execution on Arbitrum Sepolia (hackathon demo fallback)
+        if (
+            protocol == "aave"
+            and action == "supply"
+            and self.settings.arbitrum_chain_id == 421614
+            and amount_usdc > 0
+            and amount_usdc <= 5
+            and self.settings.agent_wallet_private_key
+        ):
+            try:
+                from services.onchain import OnChainExecutor
+
+                executor = OnChainExecutor()
+                result = executor.supply_aave_usdc(amount_usdc)
+                return {
+                    "success": True,
+                    "protocol": protocol,
+                    "asset": asset,
+                    "amount_usdc": amount_usdc,
+                    "action": action,
+                    "tx_hash": result["tx_hash"],
+                    "approve_tx_hash": result.get("approve_tx_hash"),
+                    "chain": chain_label(self.settings.arbitrum_chain_id),
+                    "executed_via": result.get("executed_via"),
+                }
+            except Exception as exc:
+                logger.warning("Agent wallet Aave supply failed: %s", exc)
 
         try:
             block = self.w3.eth.block_number

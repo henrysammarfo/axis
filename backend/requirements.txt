@@ -16,3 +16,5 @@ slowapi>=0.1.9
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
 pytest-httpx>=0.30.0
+x402[evm]>=0.1.0
+python-dotenv>=1.0.0

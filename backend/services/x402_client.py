@@ -48,6 +48,29 @@ class X402Client:
         return await self._venice_web_intelligence(query, user_id)
 
     async def _try_x402_payment(self, query: str, user_id: str) -> dict[str, Any] | None:
+        """Attempt real x402 micropayment via PayAI echo (Sepolia) when facilitator has no route."""
+        from services.x402_signer import X402_ECHO_ARBITRUM_SEPOLIA, pay_url
+
+        if self.settings.arbitrum_chain_id == 421614:
+            try:
+                result = await pay_url(X402_ECHO_ARBITRUM_SEPOLIA)
+                settlement = result.get("settlement") or {}
+                tx_hash = settlement.get("transaction")
+                await self._log_spend(user_id, query, paid=True)
+                return {
+                    "query": query,
+                    "analysis": result.get("body", "")[:500],
+                    "signal": "neutral",
+                    "recommendation": f"Paid market intel probe for: {query[:120]}",
+                    "risk_level": "medium",
+                    "paid": True,
+                    "source": "x402",
+                    "tx_hash": tx_hash,
+                    "payer": result.get("payer"),
+                }
+            except Exception as exc:
+                logger.warning("x402 echo payment failed: %s", exc)
+
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.post(
