@@ -1,10 +1,14 @@
 /**
  * Magic + Particle UA + ZeroDev SRA wallet integration.
  * Requires VITE_* env vars — see docs/KEYS_SETUP.md
+ *
+ * Auth persistence: Magic SDK (per-device) + AXIS backend (cross-device profile).
+ * Session state lives in memory only — restored via resumeSession() on each visit.
  */
 
 import { Magic } from "magic-sdk";
 import { OAuthExtension } from "@magic-ext/oauth2";
+import type { MagicUserMetadata } from "@magic-sdk/types";
 import { axisApi } from "./api";
 import { arbitrumChainId } from "./chain";
 import { isFrontendFullyConfigured, missingFrontendEnv } from "./env";
@@ -17,7 +21,7 @@ export type WalletSession = {
   didToken: string;
 };
 
-const SESSION_KEY = "axis_wallet_session";
+let memorySession: WalletSession | null = null;
 
 function requireEnv(name: string): string {
   const value = import.meta.env[name]?.toString().trim();
@@ -38,26 +42,20 @@ function createMagic(): Magic {
   });
 }
 
-export function getStoredSession(): WalletSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    const session = raw ? (JSON.parse(raw) as WalletSession) : null;
-    if (session && session.userId && session.uaAddress && session.didToken) {
-      return session;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+function magicEthereumAddress(info: MagicUserMetadata): string {
+  return info.wallets?.ethereum?.publicAddress?.trim() ?? "";
 }
 
-export function storeSession(session: WalletSession): void {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+function setMemorySession(session: WalletSession | null): void {
+  memorySession = session;
+}
+
+export function getStoredSession(): WalletSession | null {
+  return memorySession;
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY);
+  memorySession = null;
 }
 
 export function isWalletConfigured(): boolean {
@@ -98,57 +96,71 @@ export async function handleOAuthRedirect(): Promise<WalletSession | null> {
   if (!isFrontendFullyConfigured()) return null;
 
   const magic = createMagic();
-  try {
-    await magic.oauth2.getRedirectResult();
-    if (!(await magic.user.isLoggedIn())) return null;
-    return finalizeSession(magic);
-  } catch {
-    return null;
-  }
+  await magic.oauth2.getRedirectResult();
+  if (!(await magic.user.isLoggedIn())) return null;
+  return finalizeSession(magic);
 }
 
-/** Resume session if already logged in with Magic */
+/** Restore session from Magic login + server profile (works across devices after sign-in). */
 export async function resumeSession(): Promise<WalletSession | null> {
   if (!isFrontendFullyConfigured()) return null;
   const magic = createMagic();
-  if (!(await magic.user.isLoggedIn())) return null;
+  if (!(await magic.user.isLoggedIn())) {
+    clearSession();
+    return null;
+  }
   return finalizeSession(magic);
 }
 
 async function finalizeSession(magic: Magic): Promise<WalletSession> {
   const didToken = await magic.user.getIdToken();
   const info = await magic.user.getInfo();
-  const metadata = await magic.user.getMetadata();
 
-  let uaAddress = metadata.publicAddress ?? "";
-  if (!uaAddress) {
-    throw new Error("Wallet address unavailable. Complete Magic wallet setup.");
+  // Load or create server profile first — returns saved wallet addresses on any device.
+  let auth = await axisApi.register(didToken);
+
+  if (!auth.ua_address) {
+    if (!requireEnv("VITE_PARTICLE_PROJECT_ID")) {
+      throw new Error("Particle Network not configured. Add VITE_PARTICLE_* keys.");
+    }
+
+    const ethAddress = magicEthereumAddress(info);
+    if (!ethAddress) {
+      throw new Error("Wallet address unavailable. Complete Magic wallet setup.");
+    }
+
+    const ua = await upgradeToUniversalAccount(magic);
+    let sraAddress: string | undefined;
+
+    requireEnv("VITE_ZERODEV_PROJECT_ID");
+    requireEnv("VITE_ZERODEV_RPC_URL");
+    sraAddress = await createSmartRoutingAddress(ua.address);
+    if (!sraAddress) {
+      throw new Error("Failed to create Smart Routing Address.");
+    }
+
+    auth = await axisApi.register(didToken, ua.address, sraAddress);
+  } else if (!auth.sra_address) {
+    requireEnv("VITE_ZERODEV_PROJECT_ID");
+    requireEnv("VITE_ZERODEV_RPC_URL");
+    const sraAddress = await createSmartRoutingAddress(auth.ua_address);
+    if (sraAddress) {
+      auth = await axisApi.register(didToken, auth.ua_address, sraAddress);
+    }
   }
 
-  if (!requireEnv("VITE_PARTICLE_PROJECT_ID")) {
-    throw new Error("Particle Network not configured. Add VITE_PARTICLE_* keys.");
+  if (!auth.ua_address) {
+    throw new Error("Wallet setup incomplete. Try signing in again.");
   }
-
-  const ua = await upgradeToUniversalAccount(magic);
-  uaAddress = ua.address;
-  const sraAddress = await createSmartRoutingAddress(uaAddress);
-
-  requireEnv("VITE_ZERODEV_PROJECT_ID");
-  requireEnv("VITE_ZERODEV_RPC_URL");
-  if (!sraAddress) {
-    throw new Error("Failed to create Smart Routing Address.");
-  }
-
-  const auth = await axisApi.register(didToken, uaAddress, sraAddress);
 
   const session: WalletSession = {
     userId: auth.user_id,
-    email: auth.email ?? info.email,
-    uaAddress: auth.ua_address ?? uaAddress,
-    sraAddress: auth.sra_address ?? sraAddress,
+    email: auth.email ?? info.email ?? undefined,
+    uaAddress: auth.ua_address,
+    sraAddress: auth.sra_address,
     didToken,
   };
-  storeSession(session);
+  setMemorySession(session);
   return session;
 }
 

@@ -1,9 +1,12 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { requireSession } from "../lib/auth";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { resumeSession } from "../lib/wallet";
 
 export const Route = createFileRoute("/_authenticated")({
-  beforeLoad: () => {
-    const session = requireSession();
+  beforeLoad: async () => {
+    const session = await resumeSession();
+    if (!session) {
+      throw redirect({ to: "/onboard" });
+    }
     return { session };
   },
   component: AuthenticatedLayout,
