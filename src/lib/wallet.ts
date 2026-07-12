@@ -292,21 +292,38 @@ async function provisionUniversalAccount(ownerAddress: string): Promise<{ addres
 
 async function createSmartRoutingAddress(owner: string): Promise<string | undefined> {
   const { createSmartRoutingAddress } = await import("@zerodev/smart-routing-address");
-  const { arbitrumSepolia, baseSepolia, optimismSepolia } = await import("viem/chains");
+  const { arbitrum, arbitrumSepolia, base, baseSepolia, optimism, sepolia } = await import(
+    "viem/chains"
+  );
 
-  const { smartRoutingAddress } = await createSmartRoutingAddress({
-    owner,
-    destChain: arbitrumSepolia,
-    srcTokens: [
-      { tokenType: "USDC", chain: baseSepolia },
-      { tokenType: "USDC", chain: optimismSepolia },
-      { tokenType: "USDC", chain: arbitrumSepolia },
-    ],
-    actions: {
-      USDC: { action: [], fallBack: [] },
-    },
-    slippage: 50,
-  });
+  const isTestnet = arbitrumChainId() === ARBITRUM_SEPOLIA_CHAIN_ID;
+
+  // ZeroDev SRA only supports specific chains — optimismSepolia (11155420) is not one of them.
+  const { smartRoutingAddress } = await createSmartRoutingAddress(
+    isTestnet
+      ? {
+          owner,
+          destChain: arbitrumSepolia,
+          srcTokens: [
+            { tokenType: "USDC", chain: baseSepolia },
+            { tokenType: "USDC", chain: arbitrumSepolia },
+            { tokenType: "USDC", chain: sepolia },
+          ],
+          actions: { USDC: { action: [], fallBack: [] } },
+          slippage: 50,
+        }
+      : {
+          owner,
+          destChain: arbitrum,
+          srcTokens: [
+            { tokenType: "USDC", chain: base },
+            { tokenType: "USDC", chain: arbitrum },
+            { tokenType: "USDC", chain: optimism },
+          ],
+          actions: { USDC: { action: [], fallBack: [] } },
+          slippage: 50,
+        },
+  );
   return smartRoutingAddress;
 }
 
