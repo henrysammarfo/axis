@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     venice_api_key: str = ""
     openai_api_key: str = ""
     venice_base_url: str = "https://api.venice.ai/api/v1"
-    venice_model: str = "zai-org-glm-5-1"
+    venice_model: str = "zai-org-glm-5-2"
     openai_model: str = "gpt-4.1"
 
     # Web intelligence (required)
