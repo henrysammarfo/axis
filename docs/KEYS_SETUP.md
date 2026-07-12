@@ -166,26 +166,35 @@ Docs: https://developers.particle.network/universal-accounts/ua-reference/web/ov
 **Hackathon track:** ZeroDev ($500 subtrack)
 
 1. Go to https://dashboard.zerodev.app
-2. Sign up → **Create Project**
+2. Sign up → **Create Project** (e.g. `AXIS`)
 3. Enable **Arbitrum Sepolia** (chain ID `421614`) on the project
 4. Copy **Project ID** → `ZERODEV_PROJECT_ID` / `VITE_ZERODEV_PROJECT_ID`
-5. Go to **Gas Policies** → create policy → enable **Sponsor all transactions** (or scoped policy)
+5. Go to **Gas Policies** → select **Arbitrum Sepolia** → enable **Sponsor all transactions**
 6. From project home, copy the **v3 RPC URL** for Arbitrum Sepolia:
    ```
    https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/421614
    ```
    This single URL is used for **both bundler and paymaster** (ZeroDev v3).
+7. **Add Web App** (Wallets tab) — domain format matters:
+   - **Local dev:** leave **Domain** **empty** (ZeroDev docs: passkeys work on `localhost` without registering a domain)
+   - **Do not use** `http://localhost:5173` — no `http://`, no port → dashboard shows *"The format is wrong!"*
+   - If you must enter something for localhost, use `localhost` only
+   - **Production:** hostname only, e.g. `axis.vercel.app` (no `https://`)
 
 ```bash
 ZERODEV_PROJECT_ID=...
-ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/42161
+ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/421614
 
 VITE_ZERODEV_PROJECT_ID=...
-VITE_ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/42161
+VITE_ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_PROJECT_ID/chain/421614
 ```
 
+**Passkey server URL** (only if you add ZeroDev passkeys later — AXIS uses Magic, not ZeroDev passkeys):
+`https://passkeys.zerodev.app/api/v3/YOUR_PROJECT_ID`
+
 Docs: https://docs.zerodev.app/get-started/sdks/setup-project  
-SRA docs: https://docs.zerodev.app/cross-chain/smart-routing-address
+SRA docs: https://docs.zerodev.app/cross-chain/smart-routing-address  
+Passkeys / Web App domain: https://docs.zerodev.app/onboarding/passkeys/overview
 
 ---
 
@@ -196,13 +205,13 @@ Public RPC (`arb1.arbitrum.io`) is **blocked** by AXIS. You need a dedicated key
 1. Go to https://dashboard.alchemy.com
 2. Sign up → **Create App**
    - Chain: **Arbitrum**
-   - Network: **Arbitrum One**
+   - Network: **Arbitrum Sepolia**
    - Name: `AXIS`
 3. Open app → **API Key** → copy HTTPS URL
 
 ```bash
-ARBITRUM_RPC=https://arb-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
-VITE_ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+ARBITRUM_RPC=https://arb-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+VITE_ARBITRUM_RPC_URL=https://arb-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
 ```
 
 Alternative: Infura https://infura.io — create project, enable Arbitrum, use:
@@ -216,7 +225,7 @@ Alternative: Infura https://infura.io — create project, enable Arbitrum, use:
 
 1. Create a **new** Ethereum wallet (MetaMask → Create Account → export private key)
    - Use a dedicated agent wallet, not your personal wallet
-2. Fund on **Arbitrum One**:
+2. Fund on **Arbitrum Sepolia**:
    - ~$5 USDC (for x402 micropayments)
    - ~$2 ETH (small gas buffer if needed)
 3. Store private key securely:
@@ -270,11 +279,11 @@ PARTICLE_PROJECT_ID=
 PARTICLE_CLIENT_KEY=
 PARTICLE_APP_ID=
 ZERODEV_PROJECT_ID=
-ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_ID/chain/42161
+ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_ID/chain/421614
 GOOGLE_CLIENT_ID=
 
 ARBITRUM_RPC=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
-ARBITRUM_CHAIN_ID=42161
+ARBITRUM_CHAIN_ID=421614
 
 X402_FACILITATOR_URL=https://facilitator.payai.network
 AGENT_WALLET_PRIVATE_KEY=0x...
@@ -297,7 +306,7 @@ VITE_PARTICLE_PROJECT_ID=...
 VITE_PARTICLE_CLIENT_KEY=...
 VITE_PARTICLE_APP_ID=...
 VITE_ZERODEV_PROJECT_ID=...
-VITE_ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_ID/chain/42161
+VITE_ZERODEV_RPC_URL=https://rpc.zerodev.app/api/v3/YOUR_ID/chain/421614
 VITE_GOOGLE_CLIENT_ID=....apps.googleusercontent.com
 VITE_ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 ```
