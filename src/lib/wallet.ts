@@ -10,7 +10,7 @@ import { Magic } from "magic-sdk";
 import { OAuthExtension } from "@magic-ext/oauth2";
 import type { MagicUserMetadata } from "@magic-sdk/types";
 import { axisApi } from "./api";
-import { arbitrumChainId } from "./chain";
+import { arbitrumChainId, ARBITRUM_SEPOLIA_CHAIN_ID } from "./chain";
 import { isFrontendFullyConfigured, missingFrontendEnv } from "./env";
 
 export type WalletSession = {
@@ -218,16 +218,12 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
   }
 
   if (!auth.ua_address) {
-    if (!requireEnv("VITE_PARTICLE_PROJECT_ID")) {
-      throw new Error("Particle Network not configured. Add VITE_PARTICLE_* keys.");
-    }
-
     const ethAddress = magicEthereumAddress(info);
     if (!ethAddress) {
       throw new Error("Wallet address unavailable. Complete Magic wallet setup.");
     }
 
-    const ua = await upgradeToUniversalAccount(magic);
+    const ua = await provisionUniversalAccount(ethAddress);
     let sraAddress: string | undefined;
 
     requireEnv("VITE_ZERODEV_PROJECT_ID");
@@ -262,24 +258,36 @@ async function finalizeSession(magic: Magic): Promise<WalletSession> {
   return session;
 }
 
-async function upgradeToUniversalAccount(magic: Magic) {
-  const { UniversalAccount } = await import("@particle-network/universal-account-sdk");
-  const { BrowserProvider } = await import("ethers");
+async function provisionUniversalAccount(ownerAddress: string): Promise<{ address: string }> {
+  const chainId = arbitrumChainId();
 
-  const magicProvider = await magic.wallet.getProvider();
-  const ethersProvider = new BrowserProvider(magicProvider);
-  const signer = await ethersProvider.getSigner();
+  // Particle UA v2 only supports mainnet chains — on Sepolia use the Magic EOA directly.
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
+    return { address: ownerAddress };
+  }
 
-  const ua = new UniversalAccount(signer, {
+  requireEnv("VITE_PARTICLE_PROJECT_ID");
+  requireEnv("VITE_PARTICLE_CLIENT_KEY");
+  requireEnv("VITE_PARTICLE_APP_ID");
+
+  const { UniversalAccount, UNIVERSAL_ACCOUNT_VERSION_V2 } = await import(
+    "@particle-network/universal-account-sdk"
+  );
+
+  const ua = new UniversalAccount({
     projectId: requireEnv("VITE_PARTICLE_PROJECT_ID"),
-    clientKey: requireEnv("VITE_PARTICLE_CLIENT_KEY"),
-    appId: requireEnv("VITE_PARTICLE_APP_ID"),
-    eip7702: true,
-    chainId: arbitrumChainId(),
+    projectClientKey: requireEnv("VITE_PARTICLE_CLIENT_KEY"),
+    projectAppUuid: requireEnv("VITE_PARTICLE_APP_ID"),
+    smartAccountOptions: {
+      name: "AXIS",
+      version: UNIVERSAL_ACCOUNT_VERSION_V2,
+      ownerAddress,
+      useEIP7702: true,
+    },
   });
 
-  const address = await ua.getAddress();
-  return { address, ua };
+  const options = await ua.getSmartAccountOptions();
+  return { address: options.smartAccountAddress ?? ownerAddress };
 }
 
 async function createSmartRoutingAddress(owner: string): Promise<string | undefined> {
