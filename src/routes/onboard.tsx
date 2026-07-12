@@ -7,6 +7,7 @@ import {
   resumeSession,
   getStoredSession,
   isWalletConfigured,
+  isOAuthCallback,
 } from "../lib/wallet";
 import { useAxisConfig } from "../hooks/useAxis";
 
@@ -35,9 +36,9 @@ const RISKS = ["conservative", "moderate", "aggressive"] as const;
 
 function Onboard() {
   const navigate = useNavigate();
-  const { data: config } = useAxisConfig();
+  const { data: config, isError: configError, error: configLoadError } = useAxisConfig();
   const [step, setStep] = useState<1 | 2>(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState(500);
   const [risk, setRisk] = useState<(typeof RISKS)[number]>("moderate");
@@ -45,31 +46,34 @@ function Onboard() {
   const session = getStoredSession();
 
   useEffect(() => {
-    let cancelled = false;
+    let active = true;
 
     (async () => {
+      if (!isOAuthCallback()) return;
+
+      setLoading(true);
       try {
         const fromOAuth = await handleOAuthRedirect();
-        if (cancelled) return;
+        if (!active) return;
         if (fromOAuth) {
           setStep(2);
           return;
         }
 
         const existing = await resumeSession();
-        if (cancelled) return;
+        if (!active) return;
         if (existing) setStep(2);
       } catch (e) {
-        if (!cancelled) {
+        if (active) {
           setError(e instanceof Error ? e.message : "Login failed");
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (active) setLoading(false);
       }
     })();
 
     return () => {
-      cancelled = true;
+      active = false;
     };
   }, []);
 
@@ -133,6 +137,14 @@ function Onboard() {
                 <div className="border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-yellow-200/80">
                   Configure wallet keys before signing in. See{" "}
                   <code className="text-xs">docs/KEYS_SETUP.md</code>
+                </div>
+              )}
+
+              {configError && (
+                <div className="border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-300/90">
+                  Backend unreachable at {import.meta.env.VITE_API_URL ?? "http://localhost:8000"}.
+                  {" "}
+                  {configLoadError instanceof Error ? configLoadError.message : "Start the backend server."}
                 </div>
               )}
 

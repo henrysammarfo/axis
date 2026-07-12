@@ -82,6 +82,25 @@ function isBenignOAuthError(error: unknown): boolean {
   );
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`${label} timed out. Disable wallet browser extensions and try again.`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export function getStoredSession(): WalletSession | null {
   return memorySession;
 }
@@ -114,7 +133,7 @@ export async function loginWithGoogle(): Promise<never> {
     throw new Error("Google sign-in requires a browser.");
   }
   const magic = getMagic();
-  const loggedIn = await magic.user.isLoggedIn();
+  const loggedIn = await withTimeout(magic.user.isLoggedIn(), 12_000, "Magic sign-in check");
   if (loggedIn) {
     await finalizeSession(magic);
     return undefined as never;
@@ -143,7 +162,7 @@ export async function handleOAuthRedirect(): Promise<WalletSession | null> {
 
   const magic = getMagic();
   try {
-    await magic.oauth2.getRedirectResult();
+    await withTimeout(magic.oauth2.getRedirectResult(), 20_000, "Google sign-in");
   } catch (error) {
     stripOAuthSearchParams();
     if (isBenignOAuthError(error)) return null;
@@ -152,7 +171,8 @@ export async function handleOAuthRedirect(): Promise<WalletSession | null> {
 
   stripOAuthSearchParams();
 
-  if (!(await magic.user.isLoggedIn())) return null;
+  const loggedIn = await withTimeout(magic.user.isLoggedIn(), 12_000, "Magic sign-in check");
+  if (!loggedIn) return null;
   return finalizeSession(magic);
 }
 
@@ -162,7 +182,15 @@ export async function resumeSession(): Promise<WalletSession | null> {
 
   const magic = getMagic();
 
-  if (!(await magic.user.isLoggedIn())) {
+  let loggedIn = false;
+  try {
+    loggedIn = await withTimeout(magic.user.isLoggedIn(), 12_000, "Magic sign-in check");
+  } catch {
+    clearSession();
+    return null;
+  }
+
+  if (!loggedIn) {
     clearSession();
     return null;
   }
@@ -170,7 +198,7 @@ export async function resumeSession(): Promise<WalletSession | null> {
   // Reuse in-memory session when Magic is still logged in (avoids duplicate register calls).
   if (memorySession) {
     try {
-      const didToken = await magic.user.getIdToken();
+      const didToken = await withTimeout(magic.user.getIdToken(), 12_000, "Magic session");
       if (didToken) {
         memorySession = { ...memorySession, didToken };
         return memorySession;
@@ -192,8 +220,8 @@ export async function resumeSession(): Promise<WalletSession | null> {
 }
 
 async function finalizeSession(magic: Magic): Promise<WalletSession> {
-  const didToken = await magic.user.getIdToken();
-  const info = await magic.user.getInfo();
+  const didToken = await withTimeout(magic.user.getIdToken(), 12_000, "Magic session");
+  const info = await withTimeout(magic.user.getInfo(), 12_000, "Magic profile");
 
   let auth: {
     user_id: string;
