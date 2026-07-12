@@ -11,9 +11,9 @@ import {
 import { useAxisConfig } from "../hooks/useAxis";
 
 export const Route = createFileRoute("/onboard")({
-  beforeLoad: async () => {
+  beforeLoad: () => {
     if (typeof window === "undefined") return;
-    const session = await resumeSession();
+    const session = getStoredSession();
     if (session) {
       throw redirect({ to: "/dashboard" });
     }
@@ -93,9 +93,13 @@ function Onboard() {
     }
   };
 
-  const onActivate = () => {
-    const s = getStoredSession();
-    if (!s) return;
+  const onActivate = async () => {
+    const s = getStoredSession() ?? (await resumeSession());
+    if (!s) {
+      setError("Session expired. Sign in again.");
+      setStep(1);
+      return;
+    }
     navigate({
       to: "/dashboard",
       search: { tab: "overview", chain: "All", activate: "1", budget: String(budget), risk, goal },

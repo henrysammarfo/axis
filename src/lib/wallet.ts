@@ -22,6 +22,7 @@ export type WalletSession = {
 };
 
 let memorySession: WalletSession | null = null;
+let magicSingleton: Magic | null = null;
 
 function isBrowser(): boolean {
   return typeof window !== "undefined";
@@ -35,18 +36,21 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function createMagic(): Magic {
+function getMagic(): Magic {
   if (!isBrowser()) {
     throw new Error("Magic SDK requires a browser.");
   }
-  const magicKey = requireEnv("VITE_MAGIC_PUBLISHABLE_KEY");
-  return new Magic(magicKey, {
-    extensions: [new OAuthExtension()],
-    network: {
-      rpcUrl: requireEnv("VITE_ARBITRUM_RPC_URL"),
-      chainId: arbitrumChainId(),
-    },
-  });
+  if (!magicSingleton) {
+    const magicKey = requireEnv("VITE_MAGIC_PUBLISHABLE_KEY");
+    magicSingleton = new Magic(magicKey, {
+      extensions: [new OAuthExtension()],
+      network: {
+        rpcUrl: requireEnv("VITE_ARBITRUM_RPC_URL"),
+        chainId: arbitrumChainId(),
+      },
+    });
+  }
+  return magicSingleton;
 }
 
 function magicEthereumAddress(info: MagicUserMetadata): string {
@@ -55,6 +59,27 @@ function magicEthereumAddress(info: MagicUserMetadata): string {
 
 function setMemorySession(session: WalletSession | null): void {
   memorySession = session;
+}
+
+/** True when Google redirected back with an OAuth authorization response. */
+export function isOAuthCallback(): boolean {
+  if (!isBrowser()) return false;
+  const params = new URLSearchParams(window.location.search);
+  return (
+    params.has("code") ||
+    params.has("state") ||
+    params.has("error") ||
+    params.has("error_description")
+  );
+}
+
+function isBenignOAuthError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("MISSING_PKCE_METADATA") ||
+    message.includes("OAuth session metadata not found") ||
+    message.includes("STATE_MISMATCH")
+  );
 }
 
 export function getStoredSession(): WalletSession | null {
@@ -88,7 +113,7 @@ export async function loginWithGoogle(): Promise<never> {
   if (!isBrowser()) {
     throw new Error("Google sign-in requires a browser.");
   }
-  const magic = createMagic();
+  const magic = getMagic();
   const loggedIn = await magic.user.isLoggedIn();
   if (loggedIn) {
     await finalizeSession(magic);
@@ -101,12 +126,32 @@ export async function loginWithGoogle(): Promise<never> {
   throw new Error("Redirecting to Google sign-in…");
 }
 
-/** Complete OAuth after redirect return */
-export async function handleOAuthRedirect(): Promise<WalletSession | null> {
-  if (!isBrowser() || !isFrontendFullyConfigured()) return null;
+function stripOAuthSearchParams(): void {
+  if (!isBrowser() || !isOAuthCallback()) return;
+  const url = new URL(window.location.href);
+  for (const key of ["code", "state", "error", "error_description"]) {
+    url.searchParams.delete(key);
+  }
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
 
-  const magic = createMagic();
-  await magic.oauth2.getRedirectResult();
+/** Complete OAuth after redirect return — only runs on OAuth callback URLs. */
+export async function handleOAuthRedirect(): Promise<WalletSession | null> {
+  if (!isBrowser() || !isFrontendFullyConfigured() || !isOAuthCallback()) {
+    return null;
+  }
+
+  const magic = getMagic();
+  try {
+    await magic.oauth2.getRedirectResult();
+  } catch (error) {
+    stripOAuthSearchParams();
+    if (isBenignOAuthError(error)) return null;
+    throw error;
+  }
+
+  stripOAuthSearchParams();
+
   if (!(await magic.user.isLoggedIn())) return null;
   return finalizeSession(magic);
 }
@@ -114,20 +159,59 @@ export async function handleOAuthRedirect(): Promise<WalletSession | null> {
 /** Restore session from Magic login + server profile (works across devices after sign-in). */
 export async function resumeSession(): Promise<WalletSession | null> {
   if (!isBrowser() || !isFrontendFullyConfigured()) return null;
-  const magic = createMagic();
+
+  const magic = getMagic();
+
   if (!(await magic.user.isLoggedIn())) {
     clearSession();
     return null;
   }
-  return finalizeSession(magic);
+
+  // Reuse in-memory session when Magic is still logged in (avoids duplicate register calls).
+  if (memorySession) {
+    try {
+      const didToken = await magic.user.getIdToken();
+      if (didToken) {
+        memorySession = { ...memorySession, didToken };
+        return memorySession;
+      }
+    } catch {
+      clearSession();
+      await magic.user.logout().catch(() => {});
+      return null;
+    }
+  }
+
+  try {
+    return await finalizeSession(magic);
+  } catch {
+    clearSession();
+    await magic.user.logout().catch(() => {});
+    return null;
+  }
 }
 
 async function finalizeSession(magic: Magic): Promise<WalletSession> {
   const didToken = await magic.user.getIdToken();
   const info = await magic.user.getInfo();
 
-  // Load or create server profile first — returns saved wallet addresses on any device.
-  let auth = await axisApi.register(didToken);
+  let auth: {
+    user_id: string;
+    email?: string;
+    ua_address?: string;
+    sra_address?: string;
+  };
+
+  try {
+    auth = await axisApi.register(didToken);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Registration failed";
+    throw new Error(
+      message.includes("Magic API")
+        ? "Sign-in verification failed. Check backend MAGIC_SECRET_KEY matches your Magic app."
+        : message,
+    );
+  }
 
   if (!auth.ua_address) {
     if (!requireEnv("VITE_PARTICLE_PROJECT_ID")) {
@@ -221,7 +305,7 @@ export async function logout(): Promise<void> {
   }
   if (isFrontendFullyConfigured()) {
     try {
-      const magic = createMagic();
+      const magic = getMagic();
       await magic.user.logout();
     } catch {
       /* ignore */
