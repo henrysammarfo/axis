@@ -23,6 +23,10 @@ export type WalletSession = {
 
 let memorySession: WalletSession | null = null;
 
+function isBrowser(): boolean {
+  return typeof window !== "undefined";
+}
+
 function requireEnv(name: string): string {
   const value = import.meta.env[name]?.toString().trim();
   if (!value) {
@@ -32,6 +36,9 @@ function requireEnv(name: string): string {
 }
 
 function createMagic(): Magic {
+  if (!isBrowser()) {
+    throw new Error("Magic SDK requires a browser.");
+  }
   const magicKey = requireEnv("VITE_MAGIC_PUBLISHABLE_KEY");
   return new Magic(magicKey, {
     extensions: [new OAuthExtension()],
@@ -78,6 +85,9 @@ export function magicOAuthRedirectURI(): string {
 
 /** Start Google OAuth — redirects away from the app */
 export async function loginWithGoogle(): Promise<never> {
+  if (!isBrowser()) {
+    throw new Error("Google sign-in requires a browser.");
+  }
   const magic = createMagic();
   const loggedIn = await magic.user.isLoggedIn();
   if (loggedIn) {
@@ -93,7 +103,7 @@ export async function loginWithGoogle(): Promise<never> {
 
 /** Complete OAuth after redirect return */
 export async function handleOAuthRedirect(): Promise<WalletSession | null> {
-  if (!isFrontendFullyConfigured()) return null;
+  if (!isBrowser() || !isFrontendFullyConfigured()) return null;
 
   const magic = createMagic();
   await magic.oauth2.getRedirectResult();
@@ -103,7 +113,7 @@ export async function handleOAuthRedirect(): Promise<WalletSession | null> {
 
 /** Restore session from Magic login + server profile (works across devices after sign-in). */
 export async function resumeSession(): Promise<WalletSession | null> {
-  if (!isFrontendFullyConfigured()) return null;
+  if (!isBrowser() || !isFrontendFullyConfigured()) return null;
   const magic = createMagic();
   if (!(await magic.user.isLoggedIn())) {
     clearSession();
@@ -205,6 +215,10 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
 }
 
 export async function logout(): Promise<void> {
+  if (!isBrowser()) {
+    clearSession();
+    return;
+  }
   if (isFrontendFullyConfigured()) {
     try {
       const magic = createMagic();

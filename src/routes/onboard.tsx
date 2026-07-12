@@ -12,6 +12,7 @@ import { useAxisConfig } from "../hooks/useAxis";
 
 export const Route = createFileRoute("/onboard")({
   beforeLoad: async () => {
+    if (typeof window === "undefined") return;
     const session = await resumeSession();
     if (session) {
       throw redirect({ to: "/dashboard" });
