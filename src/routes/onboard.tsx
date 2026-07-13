@@ -8,6 +8,8 @@ import {
   getStoredSession,
   isWalletConfigured,
   isOAuthCallback,
+  warmupWalletSdk,
+  walletConfigErrors,
 } from "../lib/wallet";
 import { useAxisConfig } from "../hooks/useAxis";
 
@@ -46,6 +48,10 @@ function Onboard() {
   const session = getStoredSession();
 
   useEffect(() => {
+    warmupWalletSdk();
+  }, []);
+
+  useEffect(() => {
     let active = true;
 
     (async () => {
@@ -78,21 +84,22 @@ function Onboard() {
   }, []);
 
   const onLogin = async () => {
+    if (!isWalletConfigured()) {
+      setError(`Missing configuration: ${walletConfigErrors().join(", ")}`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const existing = await resumeSession();
-      if (existing) {
+      const result = await loginWithGoogle();
+      if (result.status === "session") {
         setStep(2);
-        return;
+        setLoading(false);
       }
-      await loginWithGoogle();
+      // status === "redirecting": page navigates to Google — keep loading state
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Login failed";
-      if (!msg.includes("Redirecting")) {
-        setError(msg);
-      }
-    } finally {
+      setError(e instanceof Error ? e.message : "Login failed");
       setLoading(false);
     }
   };
@@ -149,9 +156,10 @@ function Onboard() {
               )}
 
               <button
+                type="button"
                 onClick={onLogin}
-                disabled={loading}
-                className="w-full bg-white text-black rounded-full py-4 text-sm uppercase tracking-widest font-medium disabled:opacity-50"
+                disabled={loading || !isWalletConfigured()}
+                className="w-full bg-white text-black rounded-full py-4 text-sm uppercase tracking-widest font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Signing in…" : "Continue with Google"}
               </button>

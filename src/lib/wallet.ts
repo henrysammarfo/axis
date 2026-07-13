@@ -117,6 +117,16 @@ export function walletConfigErrors(): string[] {
   return missingFrontendEnv();
 }
 
+/** Initialize Magic SDK early so the first sign-in click is responsive. */
+export function warmupWalletSdk(): void {
+  if (!isBrowser() || !isFrontendFullyConfigured()) return;
+  try {
+    getMagic();
+  } catch {
+    /* ignore — login handler surfaces config errors */
+  }
+}
+
 /** OAuth callback URL — must match Magic dashboard redirect URI allowlist exactly. */
 export function magicOAuthRedirectURI(): string {
   const override = import.meta.env.VITE_MAGIC_REDIRECT_URI?.toString().trim();
@@ -127,22 +137,52 @@ export function magicOAuthRedirectURI(): string {
   return `${window.location.origin}/onboard`;
 }
 
-/** Start Google OAuth — redirects away from the app */
-export async function loginWithGoogle(): Promise<never> {
+/** Start Google OAuth — redirects away from the app, or returns session if already signed in. */
+export type GoogleLoginResult =
+  | { status: "session"; session: WalletSession }
+  | { status: "redirecting" };
+
+export async function loginWithGoogle(): Promise<GoogleLoginResult> {
   if (!isBrowser()) {
     throw new Error("Google sign-in requires a browser.");
   }
-  const magic = getMagic();
-  const loggedIn = await withTimeout(magic.user.isLoggedIn(), 12_000, "Magic sign-in check");
-  if (loggedIn) {
-    await finalizeSession(magic);
-    return undefined as never;
+  if (!isFrontendFullyConfigured()) {
+    throw new Error(
+      `Missing frontend configuration: ${missingFrontendEnv().join(", ")}. See docs/KEYS_SETUP.md`,
+    );
   }
-  await magic.oauth2.loginWithRedirect({
-    provider: "google",
-    redirectURI: magicOAuthRedirectURI(),
-  });
-  throw new Error("Redirecting to Google sign-in…");
+
+  const magic = getMagic();
+
+  let loggedIn = false;
+  try {
+    loggedIn = await withTimeout(magic.user.isLoggedIn(), 4_000, "Magic sign-in check");
+  } catch {
+    // Wallet extensions often block Magic — proceed to OAuth redirect.
+    loggedIn = false;
+  }
+
+  if (loggedIn) {
+    const session = await finalizeSession(magic);
+    return { status: "session", session };
+  }
+
+  try {
+    await magic.oauth2.loginWithRedirect({
+      provider: "google",
+      redirectURI: magicOAuthRedirectURI(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("redirect") || message.includes("Redirect")) {
+      throw new Error(
+        `Google sign-in could not start. Add ${magicOAuthRedirectURI()} to your Magic dashboard redirect allowlist.`,
+      );
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
+
+  return { status: "redirecting" };
 }
 
 function stripOAuthSearchParams(): void {
