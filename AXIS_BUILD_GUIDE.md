@@ -1,7 +1,17 @@
 # AXIS — AI DeFi Portfolio Agent
+
+> **SUPERSEDED (2026-07-15).** Do **not** use this file as the production source of truth.  
+> It contains known errors (RPC URLs, prize math, mock execution patterns, outdated Particle imports).  
+> **Read instead:**
+> - `docs/PRODUCTION_AUDIT.md` — mainnet / enterprise mandatory plan (fact-checked)
+> - `docs/AXIS_FACT_CHECK.md` — corrections to this guide
+> - `docs/KEYS_SETUP.md` — key acquisition (update to mainnet `42161` for production)
+>
+> Kept for historical hackathon planning context only.
+
 **Hackathon:** UXmaxx Hackathon — Pushing Crypto Towards Its Current Potential  
 **Track:** Universal Accounts Track (primary) + Arbitrum Bounty + Magic Labs Bonus + ZeroDev Subtrack  
-**Prize Target:** UA 1st $2,500 + Arbitrum $2,000 + Magic Labs $500 + ZeroDev $500 = **$5,500**  
+**Prize Target:** UA 1st $2,500 + Arbitrum $2,000 + Magic Labs $500 + ZeroDev $500 = **$5,500** *(incorrect — see AXIS_FACT_CHECK)*  
 **Stack:** Particle Network UA SDK + EIP-7702 + Magic Labs + ZeroDev SRA + Arbitrum + Claude Agent SDK + x402  
 **Frontend:** TanStack Start — connects to FastAPI backend
 

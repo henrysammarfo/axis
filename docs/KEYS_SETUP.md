@@ -1,7 +1,8 @@
 # AXIS — Complete API Keys Setup (Nothing Optional)
 
-> **Last updated:** July 2026  
-> **Default network:** Arbitrum Sepolia (`421614`) — matches x402 testnet + hackathon demos.
+> **Last updated:** 2026-07-15  
+> **Production network:** **Arbitrum One (`42161`)** — required for Particle UA v2 / EIP-7702 and ZeroDev SRA as designed.  
+> **Sepolia (`421614`)** is demo-only and **does not** complete UA/EIP-7702/SRA. See `docs/PRODUCTION_AUDIT.md`.  
 > AXIS will **not start** until every key below is configured. No mocks, no fallbacks, no public RPC.
 
 Paste keys into:

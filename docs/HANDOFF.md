@@ -2,7 +2,8 @@
 
 Last updated: 2026-07-15 (local Windows + Vercel live)  
 Repo: https://github.com/henrysammarfo/axis  
-Preferred branch: **`cursor/fix-google-login-d710`**
+Preferred branch: **`cursor/fix-google-login-d710`**  
+**Production completeness:** read **`docs/PRODUCTION_AUDIT.md`** (mainnet UA/EIP-7702/SRA — Sepolia is incomplete).
 
 ## Live Vercel URLs (test here)
 
