@@ -26,20 +26,19 @@ Google sign-in → Magic embedded wallet → Particle UA (EIP-7702) → ZeroDev 
 
 ## Current repo state (2026-07-15) — factual
 
-### Exists and working (Sepolia / local / Vercel demo path)
-- Frontend TanStack Start + onboard Magic Google OAuth
-- Backend FastAPI (`backend/`) — auth, agent, portfolio, health
-- `magic-admin` DID verification
-- Env validation (keys required to boot outside `ENVIRONMENT=testing`)
-- Vercel projects `axis` + `axis-api` (ephemeral SQLite on serverless — not prod DB)
-- Proof UI exists but currently checks **key presence**, not live 7702/SRA
+### Done on branch `cursor/mainnet-ua-7702-sra-d710`
+- Defaults / examples cut over to **42161** (frontend + backend)
+- `wallet.ts`: real Particle UA + Magic `sign7702Authorization` / `send7702Transaction` Type-4 path (official Particle Magic demo flow); **fails hard** on mainnet if SRA or 7702 missing
+- ZeroDev SRA create on mainnet (Base/OP/Arb/ETH USDC sources); no silent `console.warn` skip
+- Persist `eip7702_tx_hash` + `eip7702_delegated` on user; `/proof` shows live UA / SRA / Type-4 evidence
+- Agent-wallet Aave Sepolia path gated to `development`/`testing` + `421614` only
+- Docs: KEYS_SETUP env examples point at Arbitrum One
 
-### Incomplete vs product claims (blocked / skipped on Sepolia)
-- Particle Universal Account provisioning → **returns Magic EOA**
-- EIP-7702 Type-4 delegation → **not implemented**
-- ZeroDev SRA create → **skipped** on Sepolia
-- DeFi primary path still has Sepolia agent-wallet fallback
+### Still incomplete
+- End-to-end judge smoke on **funded** mainnet wallet (needs ~ETH gas + USDC for deposit/withdraw)
+- DeFi activate still requires client UA signature path for primary execution (not agent-wallet on mainnet)
 - Postgres durable production DB → not default on Vercel API
+- Rotate secrets previously pasted in chat
 
 ---
 
@@ -49,12 +48,12 @@ Google sign-in → Magic embedded wallet → Particle UA (EIP-7702) → ZeroDev 
 Frontend:  TanStack Start
 Backend:   FastAPI
 AI:        Venice primary + OpenAI fallback + TinyFish
-Wallet:    Magic Labs Google OAuth
-Accounts:  Particle Universal Accounts v2 + EIP-7702 (Arbitrum One)
+Wallet:    Magic Labs Google OAuth + @magic-ext/evm
+Accounts:  Particle Universal Accounts + EIP-7702 (Arbitrum One)
 Gas:       ZeroDev v3 bundler/paymaster (42161)
 Deposits:  ZeroDev Smart Routing Address → Arbitrum One
 DB:        PostgreSQL (mandatory production)
-Hosting:   Vercel frontend + durable API host (App Service / equivalent)
+Hosting:   Vercel frontend + durable API host (App Service / GCP / equivalent)
 ```
 
 ---
@@ -62,5 +61,5 @@ Hosting:   Vercel frontend + durable API host (App Service / equivalent)
 ## Next chat prompt
 
 ```
-Read docs/PRODUCTION_AUDIT.md. Execute mandatory mainnet cutover: 42161, real Particle UA+EIP-7702, real ZeroDev SRA, remove Sepolia production fallbacks, Postgres, rotate leaked keys. Nothing optional.
+Continue mainnet AXIS: update local .env to 42161 + Alchemy/ZeroDev mainnet RPCs; Google login → confirm /proof shows Type-4 hash + SRA; fund Magic wallet ~$20 ETH/USDC for smoke deposit+withdraw. Do not hallucinate — follow docs/PRODUCTION_AUDIT.md.
 ```

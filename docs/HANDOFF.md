@@ -1,8 +1,8 @@
 # AXIS handoff — continue after account switch
 
-Last updated: 2026-07-15 (local Windows + Vercel live)  
+Last updated: 2026-07-15 (local Windows + mainnet cutover in progress)  
 Repo: https://github.com/henrysammarfo/axis  
-Preferred branch: **`cursor/fix-google-login-d710`**  
+Preferred branch: **`cursor/mainnet-ua-7702-sra-d710`**  
 **Production completeness:** read **`docs/PRODUCTION_AUDIT.md`** (mainnet UA/EIP-7702/SRA — Sepolia is incomplete).
 
 ## Live Vercel URLs (test here)

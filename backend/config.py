@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from chain_config import ARBITRUM_SEPOLIA_CHAIN_ID, PUBLIC_ARBITRUM_RPCS
+from chain_config import ARBITRUM_ONE_CHAIN_ID, PUBLIC_ARBITRUM_RPCS
 
 
 class Settings(BaseSettings):
@@ -34,9 +34,9 @@ class Settings(BaseSettings):
     zerodev_paymaster_url: str = ""
     google_client_id: str = ""
 
-    # Chain (dedicated RPC required — no public endpoint; Sepolia default)
-    arbitrum_rpc: str = "https://sepolia-rollup.arbitrum.io/rpc"
-    arbitrum_chain_id: int = ARBITRUM_SEPOLIA_CHAIN_ID
+    # Chain (dedicated RPC required — no public endpoint; Arbitrum One default)
+    arbitrum_rpc: str = "https://arb1.arbitrum.io/rpc"
+    arbitrum_chain_id: int = ARBITRUM_ONE_CHAIN_ID
 
     # x402 (required)
     x402_facilitator_url: str = "https://facilitator.payai.network"

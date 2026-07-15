@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from config import get_settings
+from chain_config import ARBITRUM_ONE_CHAIN_ID
 
 router = APIRouter(tags=["health"])
 
@@ -65,6 +66,7 @@ async def config_status():
             "arbitrum_rpc": settings.arbitrum_rpc,
             "chain_id": settings.arbitrum_chain_id,
             "dedicated_rpc": settings.chain_configured,
+            "is_mainnet": settings.arbitrum_chain_id == ARBITRUM_ONE_CHAIN_ID,
         },
         "intelligence": {
             "tinyfish": bool(settings.tinyfish_api_key),

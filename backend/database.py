@@ -37,6 +37,21 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     from models import ActionLog, Position, User, X402Spend  # noqa: F401
+    from sqlalchemy import inspect, text
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        def _migrate_user_columns(sync_conn) -> None:
+            inspector = inspect(sync_conn)
+            if "users" not in inspector.get_table_names():
+                return
+            existing = {col["name"] for col in inspector.get_columns("users")}
+            if "eip7702_tx_hash" not in existing:
+                sync_conn.execute(text("ALTER TABLE users ADD COLUMN eip7702_tx_hash VARCHAR(66)"))
+            if "eip7702_delegated" not in existing:
+                sync_conn.execute(
+                    text("ALTER TABLE users ADD COLUMN eip7702_delegated BOOLEAN DEFAULT 0")
+                )
+
+        await conn.run_sync(_migrate_user_columns)

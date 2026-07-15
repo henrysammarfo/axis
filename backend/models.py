@@ -19,6 +19,8 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ua_address: Mapped[str | None] = mapped_column(String(42), nullable=True, unique=True, index=True)
     sra_address: Mapped[str | None] = mapped_column(String(42), nullable=True)
+    eip7702_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
+    eip7702_delegated: Mapped[bool] = mapped_column(default=False)
     risk_level: Mapped[str] = mapped_column(String(32), default="moderate")
     goal: Mapped[str] = mapped_column(String(255), default="maximize yield")
     budget_usdc: Mapped[float] = mapped_column(Float, default=0.0)

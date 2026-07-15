@@ -22,6 +22,8 @@ class PortfolioTracker:
         email: str | None = None,
         ua_address: str | None = None,
         sra_address: str | None = None,
+        eip7702_tx_hash: str | None = None,
+        eip7702_delegated: bool | None = None,
     ) -> User:
         if ua_address:
             await assert_address_not_claimed(self, ua_address, user_id)
@@ -35,6 +37,10 @@ class PortfolioTracker:
                 user.ua_address = normalize_address(ua_address)
             if sra_address:
                 user.sra_address = normalize_address(sra_address)
+            if eip7702_tx_hash:
+                user.eip7702_tx_hash = eip7702_tx_hash
+            if eip7702_delegated is not None:
+                user.eip7702_delegated = eip7702_delegated
             return user
 
         user = User(
@@ -42,6 +48,8 @@ class PortfolioTracker:
             email=email,
             ua_address=normalize_address(ua_address),
             sra_address=normalize_address(sra_address),
+            eip7702_tx_hash=eip7702_tx_hash,
+            eip7702_delegated=bool(eip7702_delegated),
         )
         self.db.add(user)
         await self.db.flush()

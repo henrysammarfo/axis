@@ -21,6 +21,8 @@ class RegisterRequest(BaseModel):
     ua_address: str | None = None
     sra_address: str | None = None
     email: str | None = None
+    eip7702_tx_hash: str | None = None
+    eip7702_delegated: bool | None = None
 
 
 @router.post("/verify")
@@ -56,6 +58,8 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
         email=result.get("email") or request.email,
         ua_address=request.ua_address,
         sra_address=request.sra_address,
+        eip7702_tx_hash=request.eip7702_tx_hash,
+        eip7702_delegated=request.eip7702_delegated,
     )
 
     return {
@@ -63,4 +67,6 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
         "email": user.email,
         "ua_address": user.ua_address,
         "sra_address": user.sra_address,
+        "eip7702_tx_hash": user.eip7702_tx_hash,
+        "eip7702_delegated": bool(user.eip7702_delegated),
     }

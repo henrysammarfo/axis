@@ -158,9 +158,10 @@ class DeFiExecutor:
         except Exception as exc:
             logger.warning("ZeroDev execution relay failed: %s", exc)
 
-        # Agent-wallet direct execution on Arbitrum Sepolia (hackathon demo fallback)
+        # Agent-wallet direct Aave supply is Sepolia demo-only — never production path.
         if (
-            protocol == "aave"
+            self.settings.environment in ("development", "testing")
+            and protocol == "aave"
             and action == "supply"
             and self.settings.arbitrum_chain_id == 421614
             and amount_usdc > 0

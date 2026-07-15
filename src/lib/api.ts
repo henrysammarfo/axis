@@ -32,7 +32,12 @@ export type ConfigStatus = {
   missing_keys: string[];
   ai: { venice: boolean; openai: boolean; active_provider: string };
   wallet: { magic: boolean; particle: boolean; zerodev: boolean; google_oauth: boolean };
-  chain: { arbitrum_rpc: string; chain_id: number; dedicated_rpc: boolean };
+  chain: {
+    arbitrum_rpc: string;
+    chain_id: number;
+    dedicated_rpc: boolean;
+    is_mainnet: boolean;
+  };
   intelligence: { tinyfish: boolean; x402_wallet: boolean; x402_facilitator: boolean };
 };
 
@@ -75,19 +80,31 @@ export const axisApi = {
       { method: "POST", body: JSON.stringify({ did_token: didToken }) },
     ),
 
-  register: (didToken: string, uaAddress?: string, sraAddress?: string, email?: string) =>
-    request<{ user_id: string; email?: string; ua_address?: string; sra_address?: string }>(
-      "/api/auth/register",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          did_token: didToken,
-          ua_address: uaAddress,
-          sra_address: sraAddress,
-          email,
-        }),
-      },
-    ),
+  register: (
+    didToken: string,
+    uaAddress?: string,
+    sraAddress?: string,
+    email?: string,
+    evidence?: { eip7702TxHash?: string; eip7702Delegated?: boolean },
+  ) =>
+    request<{
+      user_id: string;
+      email?: string;
+      ua_address?: string;
+      sra_address?: string;
+      eip7702_tx_hash?: string;
+      eip7702_delegated?: boolean;
+    }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        did_token: didToken,
+        ua_address: uaAddress,
+        sra_address: sraAddress,
+        email,
+        eip7702_tx_hash: evidence?.eip7702TxHash,
+        eip7702_delegated: evidence?.eip7702Delegated,
+      }),
+    }),
 
   activate: (body: {
     user_id: string;

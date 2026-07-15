@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Route as AuthenticatedRoute } from "../_authenticated";
 import { useAxisConfig } from "../../hooks/useAxis";
+import { arbiscanBaseUrl, chainDisplayName } from "../../lib/chain";
 
 export const Route = createFileRoute("/_authenticated/proof")({
   head: () => ({
@@ -19,14 +20,29 @@ export const Route = createFileRoute("/_authenticated/proof")({
 function Proof() {
   const { session } = AuthenticatedRoute.useRouteContext();
   const { data: config } = useAxisConfig();
+  const explorer = arbiscanBaseUrl();
+  const chainName = chainDisplayName();
+
+  const liveUa = Boolean(session.uaAddress);
+  const liveSra = Boolean(session.sraAddress);
+  const live7702 = Boolean(session.eip7702Delegated || session.eip7702TxHash);
 
   const checks = [
     { label: "All backend keys configured", ok: config?.fully_configured },
     { label: "Magic embedded wallet", ok: config?.wallet.magic },
-    { label: "Particle Universal Accounts (EIP-7702)", ok: config?.wallet.particle },
-    { label: "ZeroDev gas abstraction + SRA", ok: config?.wallet.zerodev },
-    { label: "Dedicated Arbitrum Sepolia RPC", ok: config?.chain.dedicated_rpc },
-    { label: "Arbitrum Sepolia (chain 421614)", ok: config?.chain.chain_id === 421614 },
+    { label: "Particle project keys present", ok: config?.wallet.particle },
+    { label: "ZeroDev project keys present", ok: config?.wallet.zerodev },
+    {
+      label: `Dedicated ${chainName} RPC`,
+      ok: config?.chain.dedicated_rpc,
+    },
+    {
+      label: "Arbitrum One (chain 42161)",
+      ok: config?.chain.chain_id === 42161 || config?.chain.is_mainnet,
+    },
+    { label: "Live UA address (session)", ok: liveUa },
+    { label: "Live EIP-7702 delegation evidence", ok: live7702 },
+    { label: "Live ZeroDev SRA address", ok: liveSra },
     { label: "Venice AI (primary)", ok: config?.ai.venice },
     { label: "OpenAI AI (fallback)", ok: config?.ai.openai },
     { label: "TinyFish live yield scraping", ok: config?.intelligence.tinyfish },
@@ -44,7 +60,8 @@ function Proof() {
       </Link>
       <h1 className="mt-8 text-4xl tracking-[-0.04em]">Judge Proof Package</h1>
       <p className="mt-3 text-white/60 text-sm leading-relaxed">
-        UXmaxx Hackathon — Universal Accounts + Arbitrum + Magic Labs + ZeroDev
+        Live mainnet evidence — keys alone are not enough. Show UA address, EIP-7702 Type-4 hash,
+        and ZeroDev SRA.
       </p>
 
       {config?.missing_keys && config.missing_keys.length > 0 && (
@@ -61,9 +78,9 @@ function Proof() {
         </h2>
         <ul className="space-y-3">
           {checks.map((c) => (
-            <li key={c.label} className="flex items-center justify-between text-sm">
+            <li key={c.label} className="flex items-center justify-between text-sm gap-4">
               <span>{c.label}</span>
-              <span className={c.ok ? "text-[color:var(--color-lime)]" : "text-white/30"}>
+              <span className={c.ok ? "text-[color:var(--color-lime)] shrink-0" : "text-white/30 shrink-0"}>
                 {c.ok ? "✓ Ready" : "○ Missing"}
               </span>
             </li>
@@ -77,13 +94,48 @@ function Proof() {
           <span className="text-white/40">User ID:</span> {session.userId}
         </p>
         <p>
-          <span className="text-white/40">UA address:</span> {session.uaAddress}
+          <span className="text-white/40">UA address (EOA = UA in 7702 mode):</span>{" "}
+          <a
+            className="underline break-all"
+            href={`${explorer}/address/${session.uaAddress}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {session.uaAddress}
+          </a>
         </p>
-        {session.sraAddress && (
+        {session.sraAddress ? (
           <p>
-            <span className="text-white/40">SRA address:</span> {session.sraAddress}
+            <span className="text-white/40">SRA address:</span>{" "}
+            <span className="break-all">{session.sraAddress}</span>
+          </p>
+        ) : (
+          <p className="text-red-300/80">SRA address missing — mainnet SRA create required.</p>
+        )}
+        {session.eip7702TxHash ? (
+          <p>
+            <span className="text-white/40">EIP-7702 Type-4 tx:</span>{" "}
+            <a
+              className="underline break-all"
+              href={`${explorer}/tx/${session.eip7702TxHash}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {session.eip7702TxHash}
+            </a>
+          </p>
+        ) : (
+          <p className="text-white/40">
+            EIP-7702 tx hash:{" "}
+            {session.eip7702Delegated
+              ? "delegated (prior session — resign in if hash needed for judges)"
+              : "not recorded yet"}
           </p>
         )}
+        <p>
+          <span className="text-white/40">EIP-7702 delegated:</span>{" "}
+          {session.eip7702Delegated || session.eip7702TxHash ? "yes" : "no"}
+        </p>
       </section>
 
       <section className="mt-6 border border-white/10 p-6 text-sm text-white/70 leading-relaxed">
@@ -93,17 +145,18 @@ function Proof() {
             Google login at{" "}
             <Link to="/onboard" className="underline">
               /onboard
-            </Link>
+            </Link>{" "}
+            (triggers UA + EIP-7702 + SRA on Arbitrum One)
           </li>
+          <li>Confirm Type-4 hash + SRA on this page</li>
           <li>Set budget → Activate AXIS</li>
           <li>
-            View positions + weekly report at{" "}
+            View positions at{" "}
             <Link to="/dashboard" className="underline">
               /dashboard
             </Link>
           </li>
-          <li>Send plain-English rebalance instruction</li>
-          <li>Deposit via SRA from any chain</li>
+          <li>Deposit USDC via SRA from Base / OP / ETH / Arbitrum</li>
         </ol>
       </section>
     </div>

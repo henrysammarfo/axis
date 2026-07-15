@@ -16,6 +16,7 @@
   "dependencies": {
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^5.2.2",
+    "@magic-ext/evm": "^1.7.0",
     "@magic-ext/oauth2": "^15.10.0",
     "@particle-network/universal-account-sdk": "^2.0.3",
     "@radix-ui/react-accordion": "^1.2.12",

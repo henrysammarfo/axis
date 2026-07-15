@@ -1,7 +1,8 @@
-"""Arbitrum network constants — default testnet for hackathon demos."""
+"""Arbitrum network constants — Arbitrum One is the production default."""
 
 ARBITRUM_SEPOLIA_CHAIN_ID = 421614
 ARBITRUM_ONE_CHAIN_ID = 42161
+
 
 PUBLIC_ARBITRUM_RPCS = {
     "https://arb1.arbitrum.io/rpc",
