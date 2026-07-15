@@ -5,7 +5,7 @@ Set-Location $root
 
 $envFile = Join-Path $root ".env"
 if (-not (Test-Path $envFile)) {
-  throw "Missing $envFile — copy .env.example and fill Arbitrum One (42161) keys."
+  throw "Missing $envFile - copy .env.example and fill Arbitrum One (42161) keys."
 }
 
 $api = "https://axis-api-teamtitanlink.vercel.app"
@@ -52,3 +52,11 @@ foreach ($k in $map.Keys) {
 Write-Host "Deploying frontend (Arbitrum One 42161)..."
 & vercel @argsList
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# Ensure stable production aliases
+$deployOut = & vercel ls axis --scope teamtitanlink 2>&1 | Out-String
+if ($deployOut -match "https://(axis-[a-z0-9]+-teamtitanlink\.vercel\.app)") {
+  $dep = $Matches[1]
+  Write-Host "Aliasing $dep -> axis-teamtitanlink.vercel.app"
+  vercel alias set $dep axis-teamtitanlink.vercel.app --scope teamtitanlink
+}
