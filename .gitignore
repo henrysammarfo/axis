@@ -41,3 +41,5 @@ backend/**/*.pyc
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
