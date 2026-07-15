@@ -18,7 +18,11 @@ export const Route = createFileRoute("/_authenticated/proof")({
 });
 
 function Proof() {
-  const { session } = AuthenticatedRoute.useRouteContext();
+  const ctx = AuthenticatedRoute.useRouteContext();
+  if (!("session" in ctx) || !ctx.session) {
+    throw new Error("Authenticated session missing");
+  }
+  const { session } = ctx;
   const { data: config } = useAxisConfig();
   const explorer = arbiscanBaseUrl();
   const chainName = chainDisplayName();
