@@ -43,7 +43,7 @@ if ($map["VITE_ZERODEV_RPC_URL"] -notmatch "/chain/42161") {
   throw "VITE_ZERODEV_RPC_URL must use /chain/42161 for Arbitrum One."
 }
 
-$argsList = @("deploy", "--prod", "--yes", "--scope", "teamtitanlink")
+$argsList = @("deploy", "--prod", "--yes", "--scope", "teamtitanlink", "--force")
 foreach ($k in $map.Keys) {
   $argsList += "-b"
   $argsList += "$k=$($map[$k])"
@@ -53,10 +53,17 @@ Write-Host "Deploying frontend (Arbitrum One 42161)..."
 & vercel @argsList
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Ensure stable production aliases
-$deployOut = & vercel ls axis --scope teamtitanlink 2>&1 | Out-String
-if ($deployOut -match "https://(axis-[a-z0-9]+-teamtitanlink\.vercel\.app)") {
-  $dep = $Matches[1]
-  Write-Host "Aliasing $dep -> axis-teamtitanlink.vercel.app"
-  vercel alias set $dep axis-teamtitanlink.vercel.app --scope teamtitanlink
+# Alias whichever project is currently linked
+$projectName = "axis"
+if (Test-Path (Join-Path $root ".vercel\project.json")) {
+  $pj = Get-Content (Join-Path $root ".vercel\project.json") -Raw | ConvertFrom-Json
+  if ($pj.projectName) { $projectName = $pj.projectName }
 }
+$alias = if ($projectName -eq "axis-mainnet") { "axis-mainnet.vercel.app" } else { "axis-teamtitanlink.vercel.app" }
+$deployOut = & vercel ls $projectName --scope teamtitanlink 2>&1 | Out-String
+if ($deployOut -match "https://(($projectName)-[a-z0-9]+-teamtitanlink\.vercel\.app)") {
+  $dep = $Matches[1]
+  Write-Host "Aliasing $dep -> $alias"
+  vercel alias set $dep $alias --scope teamtitanlink
+}
+Write-Host "FRONTEND_DEPLOY_OK $alias"
