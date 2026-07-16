@@ -86,21 +86,64 @@ function setMemorySession(session: WalletSession | null): void {
   memorySession = session;
 }
 
-function formatWalletError(error: unknown, fallback: string, fundAddress?: string): Error {
+function formatWalletError(error: unknown, fallback: string, _fundAddress?: string): Error {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
+  if (
+    lower.includes("sponsor wallet needs a refill") ||
+    lower.includes("agent_wallet")
+  ) {
+    return new Error(message);
+  }
   if (
     lower.includes("insufficient funds") ||
     lower.includes("insufficient balance") ||
     lower.includes("gas required exceeds")
   ) {
-    const where = fundAddress
-      ? ` Send ~$2–5 of ETH on Arbitrum One (chain 42161) to ${fundAddress}, wait ~30s, then sign in again.`
-      : " Fund the Magic wallet with a small amount of ETH on Arbitrum One, then sign in again.";
-    return new Error(`Insufficient funds for EIP-7702 delegation gas on Arbitrum One.${where}`);
+    return new Error(
+      "Account upgrade is gasless — AXIS pays. If this persists, the sponsor wallet needs a refill of ETH on Arbitrum One.",
+    );
   }
   return error instanceof Error ? error : new Error(message || fallback);
 }
+
+function normalize7702Authorization(
+  raw: unknown,
+  defaults: { chainId: number; contractAddress: string; nonce: number },
+): Record<string, unknown> {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const address =
+    (typeof a.address === "string" && a.address) ||
+    (typeof a.contractAddress === "string" && a.contractAddress) ||
+    defaults.contractAddress;
+  const chainId =
+    typeof a.chainId === "number"
+      ? a.chainId
+      : typeof a.chain_id === "number"
+        ? a.chain_id
+        : defaults.chainId;
+  const nonce =
+    typeof a.nonce === "number"
+      ? a.nonce
+      : typeof a.nonce === "string"
+        ? Number(a.nonce)
+        : defaults.nonce;
+  const r = a.r ?? a.R;
+  const s = a.s ?? a.S;
+  const yParity = a.yParity ?? a.y_parity ?? a.v;
+  if (r == null || s == null || yParity == null) {
+    throw new Error("Magic authorization signature incomplete. Try signing in again.");
+  }
+  return {
+    chainId,
+    address,
+    nonce,
+    r: typeof r === "string" || typeof r === "number" ? r : String(r),
+    s: typeof s === "string" || typeof s === "number" ? s : String(s),
+    yParity: typeof yParity === "number" ? yParity : Number(yParity),
+  };
+}
+
 
 /** True when Google redirected back with an OAuth authorization response. */
 export function isOAuthCallback(): boolean {
@@ -346,8 +389,8 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
 
   if (needsUa || needsSra || needs7702Evidence) {
     const provisioned = needsUa
-      ? await provisionUniversalAccount(magic, ethAddress)
-      : await ensureEip7702Delegation(magic, ethAddress, auth.ua_address!);
+      ? await provisionUniversalAccount(magic, ethAddress, didToken)
+      : await ensureEip7702Delegation(magic, ethAddress, auth.ua_address!, didToken);
 
     const uaAddress = provisioned.address;
     const sraAddress =
@@ -380,7 +423,7 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
 
   if (isArbitrumOne() && !auth.eip7702_delegated && !auth.eip7702_tx_hash) {
     throw new Error(
-      "EIP-7702 delegation incomplete. Fund the Magic wallet with ETH for gas, then sign in again.",
+      "Account upgrade incomplete. Sign in again — AXIS sponsors EIP-7702 gas for you.",
     );
   }
 
@@ -400,6 +443,7 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
 async function provisionUniversalAccount(
   magic: AxisMagic,
   ownerAddress: string,
+  didToken: string,
 ): Promise<ProvisionResult> {
   const chainId = arbitrumChainId();
 
@@ -443,7 +487,7 @@ async function provisionUniversalAccount(
     );
   }
 
-  const delegated = await ensureEip7702Delegation(magic, ownerAddress, address, ua);
+  const delegated = await ensureEip7702Delegation(magic, ownerAddress, address, didToken, ua);
   return delegated;
 }
 
@@ -451,6 +495,7 @@ async function ensureEip7702Delegation(
   magic: AxisMagic,
   ownerAddress: string,
   uaAddress: string,
+  didToken: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   existingUa?: any,
 ): Promise<ProvisionResult> {
@@ -496,24 +541,53 @@ async function ensureEip7702Delegation(
       throw new Error("Particle getEIP7702Auth did not return a contract address for Arbitrum One.");
     }
 
-    // Particle Magic demo: nonce must be auth.nonce + 1 for the initial Type-4 delegation.
-    const authorization = await magic.wallet.sign7702Authorization({
+    // Sponsored Type-4: authority != tx sender, so use Particle nonce as-is (not +1).
+    const authNonce = typeof auth.nonce === "number" ? auth.nonce : 0;
+    const rawAuthorization = await magic.wallet.sign7702Authorization({
       contractAddress: auth.address,
       chainId,
-      nonce: typeof auth.nonce === "number" ? auth.nonce + 1 : undefined,
+      nonce: authNonce,
     });
 
-    const { transactionHash } = await magic.wallet.send7702Transaction({
-      to: ownerAddress,
-      data: "0x",
-      authorizationList: [authorization],
+    const authorization = normalize7702Authorization(rawAuthorization, {
+      chainId,
+      contractAddress: auth.address,
+      nonce: authNonce,
     });
+
+    let transactionHash: string | undefined;
+    try {
+      const sponsored = await axisApi.sponsorEip7702(didToken, ownerAddress, authorization);
+      transactionHash = sponsored.tx_hash;
+    } catch (sponsorError) {
+      const sponsorMsg =
+        sponsorError instanceof Error ? sponsorError.message : String(sponsorError);
+      // Optional safety net: if sponsor is down and Magic EOA already has ETH, self-broadcast.
+      try {
+        const selfAuth = await magic.wallet.sign7702Authorization({
+          contractAddress: auth.address,
+          chainId,
+          nonce: authNonce + 1,
+        });
+        const { transactionHash: selfHash } = await magic.wallet.send7702Transaction({
+          to: ownerAddress,
+          data: "0x",
+          authorizationList: [selfAuth],
+        });
+        transactionHash = selfHash;
+      } catch {
+        throw new Error(
+          sponsorMsg.includes("refill") || sponsorMsg.includes("sponsor")
+            ? sponsorMsg
+            : `Gasless account upgrade failed: ${sponsorMsg}`,
+        );
+      }
+    }
 
     if (!transactionHash) {
       throw new Error("EIP-7702 Type-4 transaction did not return a hash.");
     }
 
-    // Re-check delegation status when Particle reports it; hash alone is stored as proof.
     const after = await ua.getEIP7702Deployments();
     const arbAfter = (after as Array<{ chainId: number; isDelegated?: boolean }>).find(
       (d) => d.chainId === chainId,
@@ -525,7 +599,7 @@ async function ensureEip7702Delegation(
       eip7702Delegated: Boolean(arbAfter?.isDelegated ?? true),
     };
   } catch (error) {
-    throw formatWalletError(error, "EIP-7702 delegation failed", ownerAddress);
+    throw formatWalletError(error, "EIP-7702 delegation failed");
   }
 }
 

@@ -106,6 +106,28 @@ export const axisApi = {
       }),
     }),
 
+  sponsorEip7702: (
+    didToken: string,
+    authority: string,
+    authorization: Record<string, unknown>,
+  ) =>
+    request<{
+      tx_hash: string;
+      delegated: boolean;
+      authority: string;
+      sponsor: string;
+      user_id: string;
+      eip7702_tx_hash?: string;
+      eip7702_delegated?: boolean;
+    }>("/api/auth/sponsor-eip7702", {
+      method: "POST",
+      body: JSON.stringify({
+        did_token: didToken,
+        authority,
+        authorization,
+      }),
+    }),
+
   activate: (body: {
     user_id: string;
     budget_usdc: number;

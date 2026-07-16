@@ -38,6 +38,7 @@ function Onboard() {
   const { data: config, isError: configError, error: configLoadError } = useAxisConfig();
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState("Signing in…");
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState(500);
   const [risk, setRisk] = useState<(typeof RISKS)[number]>("moderate");
@@ -55,6 +56,8 @@ function Onboard() {
       if (!isOAuthCallback()) return;
 
       setLoading(true);
+      setLoadingLabel("Upgrading account (gasless)…");
+      setError(null);
       try {
         const fromOAuth = await handleOAuthRedirect();
         if (!active) return;
@@ -87,10 +90,12 @@ function Onboard() {
     }
 
     setLoading(true);
+    setLoadingLabel("Signing in…");
     setError(null);
     try {
       const result = await loginWithGoogle();
       if (result.status === "session") {
+        setLoadingLabel("Upgrading account (gasless)…");
         setStep(2);
         setLoading(false);
       }
@@ -132,8 +137,8 @@ function Onboard() {
               <div>
                 <h1 className="text-4xl tracking-[-0.04em]">Welcome to AXIS</h1>
                 <p className="mt-3 text-white/60 text-sm leading-relaxed">
-                  Sign in with Google. Your secure account is created automatically — no seed
-                  phrase, no wallet app.
+                  Sign in with Google. Your wallet is created and upgraded automatically —
+                  no seed phrase, no MetaMask, no gas for you to fund.
                 </p>
               </div>
 
@@ -158,43 +163,20 @@ function Onboard() {
                 disabled={loading || !isWalletConfigured()}
                 className="w-full bg-white text-black rounded-full py-4 text-sm uppercase tracking-widest font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? "Signing in…" : "Continue with Google"}
+                {loading ? loadingLabel : "Continue with Google"}
               </button>
 
-              {error && (() => {
-                const fundMatch = error.match(/0x[a-fA-F0-9]{40}/);
-                const fundAddress = fundMatch?.[0];
-                return (
-                  <div className="border border-red-500/30 bg-red-500/5 p-4 space-y-3">
-                    <p className="text-red-300 text-sm leading-relaxed">{error}</p>
-                    {fundAddress && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-widest text-white/40">
-                          Magic wallet · Arbitrum One
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 truncate text-xs text-white/80 bg-white/5 px-3 py-2 rounded">
-                            {fundAddress}
-                          </code>
-                          <button
-                            type="button"
-                            className="shrink-0 rounded-full border border-white/20 px-3 py-2 text-[10px] uppercase tracking-widest text-white/70 hover:bg-white/10"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(fundAddress);
-                            }}
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <p className="text-xs text-white/50 leading-relaxed">
-                          Bridge or send ETH to this address on <strong className="text-white/70">Arbitrum One</strong> only
-                          (not Ethereum mainnet). ~$2–5 is enough for the Type-4 delegation. Then click Continue with Google again.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {error && (
+                <div className="border border-red-500/30 bg-red-500/5 p-4 space-y-2">
+                  <p className="text-red-300 text-sm leading-relaxed">{error}</p>
+                  {/sponsor|refill|agent_wallet/i.test(error) && (
+                    <p className="text-xs text-white/45 leading-relaxed">
+                      Ops note: top up <code className="text-white/60">AGENT_WALLET</code> with ETH on
+                      Arbitrum One. Users never fund their Magic wallet for EIP-7702.
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
 

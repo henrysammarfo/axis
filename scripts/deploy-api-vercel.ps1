@@ -1,6 +1,11 @@
 $ErrorActionPreference = "Stop"
 Set-Location "C:\Users\RICHEY_SON\Desktop\axis\backend"
 
+$env:GIT_AUTHOR_NAME = "Henry Sam Marfo"
+$env:GIT_AUTHOR_EMAIL = "90197918+henrysammarfo@users.noreply.github.com"
+$env:GIT_COMMITTER_NAME = "Henry Sam Marfo"
+$env:GIT_COMMITTER_EMAIL = "90197918+henrysammarfo@users.noreply.github.com"
+
 $argsList = @("deploy", "--prod", "--yes", "--scope", "teamtitanlink", "--force")
 
 Get-Content .env | ForEach-Object {
@@ -11,9 +16,9 @@ Get-Content .env | ForEach-Object {
   $v = $line.Substring($i + 1)
   switch ($k) {
     "DATABASE_URL" { $v = "sqlite+aiosqlite:////tmp/axis.db" }
-    "FRONTEND_URL" { $v = "https://axis-teamtitanlink.vercel.app" }
+    "FRONTEND_URL" { $v = "https://axis-mainnet.vercel.app" }
     "CORS_ORIGINS" { $v = "https://axis-mainnet.vercel.app,https://axis-teamtitanlink.vercel.app,https://axis-three-phi.vercel.app,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000" }
-    "ENVIRONMENT" { $v = "development" }
+    "ENVIRONMENT" { $v = "production" }
   }
   $argsList += "-e"
   $argsList += "${k}=${v}"

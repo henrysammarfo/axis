@@ -1,11 +1,13 @@
 """Magic Labs authentication routes."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from rate_limit import limiter
 from services.auth_service import AuthService
+from services.eip7702_sponsor import Eip7702Sponsor
 from services.portfolio_tracker import PortfolioTracker
 from services.tenant_guard import assert_address_not_claimed
 
@@ -23,6 +25,12 @@ class RegisterRequest(BaseModel):
     email: str | None = None
     eip7702_tx_hash: str | None = None
     eip7702_delegated: bool | None = None
+
+
+class SponsorEip7702Request(BaseModel):
+    did_token: str
+    authority: str = Field(min_length=42, max_length=42)
+    authorization: dict
 
 
 @router.post("/verify")
@@ -69,4 +77,64 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
         "sra_address": user.sra_address,
         "eip7702_tx_hash": user.eip7702_tx_hash,
         "eip7702_delegated": bool(user.eip7702_delegated),
+    }
+
+
+@router.post("/sponsor-eip7702")
+@limiter.limit("5/minute")
+async def sponsor_eip7702(
+    request_body: SponsorEip7702Request,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Broadcast Type-4 EIP-7702 for the Magic EOA — AXIS pays gas."""
+    auth = AuthService()
+    result = await auth.verify_magic_token(request_body.did_token)
+    if not result.get("valid"):
+        raise HTTPException(status_code=401, detail=result.get("error", "Invalid token"))
+
+    magic_address = result.get("public_address")
+    if not magic_address:
+        raise HTTPException(status_code=400, detail="Magic wallet address unavailable from DID token")
+
+    if magic_address.lower() != request_body.authority.lower():
+        raise HTTPException(
+            status_code=403,
+            detail="Authority must match the Magic wallet on the DID token",
+        )
+
+    user_id = auth.user_id_from_auth(result)
+    tracker = PortfolioTracker(db)
+
+    try:
+        sponsor = Eip7702Sponsor()
+        outcome = sponsor.sponsor_delegation(
+            authority=request_body.authority,
+            authorization=request_body.authorization,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"EIP-7702 sponsorship failed: {exc}") from exc
+
+    await assert_address_not_claimed(tracker, request_body.authority, user_id)
+    user = await tracker.ensure_user(
+        user_id=user_id,
+        email=result.get("email"),
+        ua_address=request_body.authority,
+        eip7702_tx_hash=outcome["tx_hash"],
+        eip7702_delegated=True,
+    )
+
+    return {
+        "tx_hash": outcome["tx_hash"],
+        "delegated": True,
+        "authority": outcome["authority"],
+        "sponsor": outcome["sponsor"],
+        "user_id": user.id,
+        "ua_address": user.ua_address,
+        "eip7702_tx_hash": user.eip7702_tx_hash,
+        "eip7702_delegated": True,
     }
