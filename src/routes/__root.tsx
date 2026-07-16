@@ -11,9 +11,11 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { assertFrontendEnv } from "../lib/env";
+import { reportClientError } from "../lib/error-reporting";
 import { CustomCursor } from "../components/brand/CustomCursor";
 import { MobileBottomNav } from "../components/brand/MobileMenu";
+import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -36,7 +38,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportClientError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
   return (
     <div className="flex min-h-screen items-center justify-center bg-black text-white px-4 font-tight">
@@ -112,10 +114,16 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const showBottomNav = pathname !== "/";
+
+  useEffect(() => {
+    assertFrontendEnv();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <CustomCursor />
       <Outlet />
+      <Toaster theme="dark" />
       {showBottomNav && <MobileBottomNav />}
     </QueryClientProvider>
   );

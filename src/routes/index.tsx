@@ -212,7 +212,7 @@ function Index() {
         }}
       >
         <Link
-          to="/dashboard"
+          to="/onboard"
           className="font-tight text-white pointer-events-auto"
           style={{ fontSize: 72, letterSpacing: "-0.04em", mixBlendMode: "exclusion" }}
         >

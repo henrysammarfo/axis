@@ -15,8 +15,22 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+.env
+.env.*
+!.env.example
+!backend/.env.example
+backend/.env
+backend/axis.db
+.axis-deploy-args.json
+# Local Vercel MCP/CLI deploy payloads (may embed .env in archives)
+scripts/_*
+scripts/_mcp_deploy_payload/
+.vercel
+backend/__pycache__
+backend/.pytest_cache
+backend/**/*.pyc
 
-# Wrangler / Cloudflare
+.lovable
 .wrangler/
 .dev.vars
 
@@ -30,3 +44,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
