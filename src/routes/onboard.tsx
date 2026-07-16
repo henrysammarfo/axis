@@ -161,7 +161,40 @@ function Onboard() {
                 {loading ? "Signing in…" : "Continue with Google"}
               </button>
 
-              {error && <p className="text-red-400 text-sm">{error}</p>}
+              {error && (() => {
+                const fundMatch = error.match(/0x[a-fA-F0-9]{40}/);
+                const fundAddress = fundMatch?.[0];
+                return (
+                  <div className="border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+                    <p className="text-red-300 text-sm leading-relaxed">{error}</p>
+                    {fundAddress && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-widest text-white/40">
+                          Magic wallet · Arbitrum One
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 truncate text-xs text-white/80 bg-white/5 px-3 py-2 rounded">
+                            {fundAddress}
+                          </code>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-full border border-white/20 px-3 py-2 text-[10px] uppercase tracking-widest text-white/70 hover:bg-white/10"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(fundAddress);
+                            }}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <p className="text-xs text-white/50 leading-relaxed">
+                          Bridge or send ETH to this address on <strong className="text-white/70">Arbitrum One</strong> only
+                          (not Ethereum mainnet). ~$2–5 is enough for the Type-4 delegation. Then click Continue with Google again.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           )}
 

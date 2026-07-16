@@ -86,7 +86,7 @@ function setMemorySession(session: WalletSession | null): void {
   memorySession = session;
 }
 
-function formatWalletError(error: unknown, fallback: string): Error {
+function formatWalletError(error: unknown, fallback: string, fundAddress?: string): Error {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
   if (
@@ -94,9 +94,10 @@ function formatWalletError(error: unknown, fallback: string): Error {
     lower.includes("insufficient balance") ||
     lower.includes("gas required exceeds")
   ) {
-    return new Error(
-      "Insufficient funds for EIP-7702 delegation gas on Arbitrum One. Fund the Magic wallet with a small amount of ETH, then sign in again.",
-    );
+    const where = fundAddress
+      ? ` Send ~$2–5 of ETH on Arbitrum One (chain 42161) to ${fundAddress}, wait ~30s, then sign in again.`
+      : " Fund the Magic wallet with a small amount of ETH on Arbitrum One, then sign in again.";
+    return new Error(`Insufficient funds for EIP-7702 delegation gas on Arbitrum One.${where}`);
   }
   return error instanceof Error ? error : new Error(message || fallback);
 }
@@ -524,7 +525,7 @@ async function ensureEip7702Delegation(
       eip7702Delegated: Boolean(arbAfter?.isDelegated ?? true),
     };
   } catch (error) {
-    throw formatWalletError(error, "EIP-7702 delegation failed");
+    throw formatWalletError(error, "EIP-7702 delegation failed", ownerAddress);
   }
 }
 
