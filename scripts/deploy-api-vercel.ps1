@@ -12,7 +12,7 @@ Get-Content .env | ForEach-Object {
   switch ($k) {
     "DATABASE_URL" { $v = "sqlite+aiosqlite:////tmp/axis.db" }
     "FRONTEND_URL" { $v = "https://axis-teamtitanlink.vercel.app" }
-    "CORS_ORIGINS" { $v = "https://axis-teamtitanlink.vercel.app,https://axis-three-phi.vercel.app,http://localhost:5173,http://localhost:3000" }
+    "CORS_ORIGINS" { $v = "https://axis-mainnet.vercel.app,https://axis-teamtitanlink.vercel.app,https://axis-three-phi.vercel.app,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000" }
     "ENVIRONMENT" { $v = "development" }
   }
   $argsList += "-e"

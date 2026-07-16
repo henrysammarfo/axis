@@ -20,6 +20,18 @@ CHAIN_LABEL_BY_ID = {
     ARBITRUM_SEPOLIA_CHAIN_ID: "arbitrum-sepolia",
 }
 
+# Live yield sources (mainnet)
+GMX_APY_URLS = (
+    "https://arbitrum-api.gmxinfra.io/apy?period=30d",
+    "https://arbitrum.gmxapi.io/v1/apy?period=30d",
+)
+DEFILLAMA_POOLS_URL = "https://yields.llama.fi/pools"
+UNISWAP_FEE_POOL_META = {
+    500: "0.05%",
+    3000: "0.3%",
+    10000: "1%",
+}
+
 # Aave v3 — GraphQL supports mainnet chains only; Sepolia uses on-chain reads
 AAVE_GRAPHQL_URL = "https://api.v3.aave.com/graphql"
 AAVE_SUPPORTED_SYMBOLS = frozenset({"USDC", "USDT", "ETH", "WBTC"})

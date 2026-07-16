@@ -14,7 +14,7 @@ AXIS_TOOLS = [
     },
     {
         "name": "check_gmx_apy",
-        "description": "Check current APY for GMX GLP liquidity provision on Arbitrum",
+        "description": "Check current APY for GMX v2 GM liquidity pools on Arbitrum",
         "input_schema": {"type": "object", "properties": {}},
     },
     {

@@ -27,7 +27,7 @@ const RISK_ICON = { Low: Shield, Med: Activity, High: TrendingUp };
 const STRATEGIES = [
   { id: "aave-usdc", name: "Aave USDC Supply", chain: "Arbitrum" as Chain, risk: "Low" as Risk, protocol: "aave", asset: "USDC" },
   { id: "aave-eth", name: "Aave ETH Supply", chain: "Arbitrum" as Chain, risk: "Low" as Risk, protocol: "aave", asset: "ETH" },
-  { id: "gmx-glp", name: "GMX GLP", chain: "Arbitrum" as Chain, risk: "Med" as Risk, protocol: "gmx", asset: "GLP" },
+  { id: "gmx-glp", name: "GMX GM Pools", chain: "Arbitrum" as Chain, risk: "Med" as Risk, protocol: "gmx", asset: "GM" },
 ] as const;
 
 function VaultPage() {
