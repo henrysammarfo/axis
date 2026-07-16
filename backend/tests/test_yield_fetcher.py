@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from chain_config import liquidity_rate_to_apy_percent
-from services.yield_fetcher import YieldFetcher
+from services.yield_fetcher import YieldFetcher, _parse_gmx_apy_payload, _symbol_matches_pair
 
 
 def test_liquidity_rate_to_apy():
@@ -87,6 +87,49 @@ async def test_aave_graphql_parses_usdc():
     assert result is not None
     assert result["supply_apy"] == 3.79
     assert result["source"] == "aave_api"
+
+
+def test_parse_gmx_apy_payload_uses_top_markets():
+    payload = {
+        "markets": {
+            "0x1": {"apy": 0.10},
+            "0x2": {"apy": 0.08},
+            "0x3": {"apy": 0.06},
+            "0x4": {"apy": 0.04},
+            "0x5": {"apy": 0.02},
+            "0x6": {"apy": 0.01},
+        }
+    }
+    result = _parse_gmx_apy_payload(payload, chain_name="arbitrum", source="gmx_api")
+    assert result is not None
+    assert result["apy"] == 6.0
+    assert result["top_market_apy"] == 10.0
+    assert result["markets_tracked"] == 6
+
+
+def test_symbol_matches_pair_normalizes_eth_and_weth():
+    assert _symbol_matches_pair("WETH-USDC", "USDC", "ETH")
+    assert _symbol_matches_pair("USDC-WETH", "ETH", "USDC")
+
+
+@pytest.mark.asyncio
+async def test_get_uniswap_apy_uses_defillama_pool(monkeypatch):
+    fetcher = YieldFetcher()
+    fetcher.chain_id = 42161
+    fetcher.chain_name = "arbitrum"
+
+    async def _mock_defillama(_token0, _token1, _fee_tier):
+        return {
+            "symbol": "WETH-USDC",
+            "apy": 12.34,
+            "tvlUsd": 1_000_000,
+            "poolMeta": "0.3%",
+        }
+
+    monkeypatch.setattr(fetcher, "_fetch_uniswap_defillama", _mock_defillama)
+    result = await fetcher.get_uniswap_apy("USDC", "ETH", 3000)
+    assert result["estimated_apy"] == 12.34
+    assert result["source"] == "defillama"
 
 
 @pytest.mark.asyncio

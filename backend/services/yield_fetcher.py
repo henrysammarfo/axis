@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -15,12 +17,18 @@ from chain_config import (
     AAVE_UNDERLYING_BY_CHAIN,
     ARBITRUM_ONE_CHAIN_ID,
     ARBITRUM_SEPOLIA_CHAIN_ID,
+    DEFILLAMA_POOLS_URL,
+    GMX_APY_URLS,
+    UNISWAP_FEE_POOL_META,
     chain_label,
     liquidity_rate_to_apy_percent,
 )
 from config import get_settings
 
 logger = logging.getLogger(__name__)
+
+_DEFILLAMA_POOLS_CACHE: tuple[float, list[dict[str, Any]]] | None = None
+_DEFILLAMA_CACHE_TTL_SECONDS = 600
 
 AAVE_RESERVE_DATA_ABI = [
     {
@@ -48,6 +56,55 @@ AAVE_RESERVE_DATA_ABI = [
 
 class YieldDataUnavailable(Exception):
     """Raised when no live yield source returns data."""
+
+
+def _token_aliases(token: str) -> set[str]:
+    token = token.upper()
+    if token in {"ETH", "WETH"}:
+        return {"ETH", "WETH"}
+    if token == "USDC":
+        return {"USDC", "USDC.E"}
+    return {token}
+
+
+def _symbol_matches_pair(symbol: str, token0: str, token1: str) -> bool:
+    parts = [part.strip().upper().split(".")[0] for part in symbol.split("-") if part.strip()]
+    if len(parts) < 2:
+        return False
+    aliases0 = _token_aliases(token0)
+    aliases1 = _token_aliases(token1)
+    return any(part in aliases0 for part in parts) and any(part in aliases1 for part in parts)
+
+
+def _parse_gmx_apy_payload(data: dict[str, Any], *, chain_name: str, source: str) -> dict[str, Any] | None:
+    markets = data.get("markets", {})
+    if not isinstance(markets, dict):
+        return None
+
+    apys = sorted(
+        (
+            float(entry.get("apy", 0) or 0)
+            for entry in markets.values()
+            if float(entry.get("apy", 0) or 0) > 0
+        ),
+        reverse=True,
+    )
+    if not apys:
+        return None
+
+    top = apys[:5]
+    representative = (sum(top) / len(top)) * 100
+    return {
+        "protocol": "gmx_gm",
+        "apy": round(representative, 2),
+        "top_market_apy": round(apys[0] * 100, 2),
+        "markets_tracked": len(apys),
+        "period": "30d",
+        "chain": chain_name,
+        "risk": "medium",
+        "source": source,
+        "note": "GMX v2 GM pool yield (30d APY, average of top 5 markets)",
+    }
 
 
 class YieldFetcher:
@@ -170,89 +227,102 @@ class YieldFetcher:
         }
 
     async def get_gmx_apy(self) -> dict[str, Any]:
+        try:
+            return await asyncio.wait_for(self._get_gmx_apy_inner(), timeout=20)
+        except TimeoutError as exc:
+            raise YieldDataUnavailable("Live GMX yield timed out") from exc
+
+    async def _get_gmx_apy_inner(self) -> dict[str, Any]:
         if self.chain_id == ARBITRUM_SEPOLIA_CHAIN_ID:
             scraped = await self._tinyfish_gmx_apy()
             if scraped:
                 return scraped
             raise YieldDataUnavailable("GMX APR is not on Arbitrum Sepolia; TinyFish scrape failed")
 
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.get("https://arbitrum-api.gmxinfra.io/apr")
-                if r.status_code == 200:
-                    data = r.json()
-                    glp_apr = float(data.get("glp", data.get("glpApr", 0)) or 0)
-                    if glp_apr > 0:
-                        return {
-                            "protocol": "gmx_glp",
-                            "apy": round(glp_apr, 2),
-                            "chain": self.chain_name,
-                            "risk": "medium",
-                            "source": "gmx_api",
-                            "note": "GLP earns from protocol trading fees",
-                        }
-        except Exception as exc:
-            logger.warning("GMX API failed: %s", exc)
+        errors: list[str] = []
+        for url in GMX_APY_URLS:
+            try:
+                async with httpx.AsyncClient(timeout=12) as client:
+                    response = await client.get(url)
+                    if response.status_code != 200:
+                        errors.append(f"{url}: HTTP {response.status_code}")
+                        continue
+                    parsed = _parse_gmx_apy_payload(
+                        response.json(),
+                        chain_name=self.chain_name,
+                        source="gmx_api",
+                    )
+                    if parsed:
+                        return parsed
+                    errors.append(f"{url}: empty markets")
+            except Exception as exc:
+                errors.append(f"{url}: {exc}")
+                logger.warning("GMX API failed for %s: %s", url, exc)
 
         scraped = await self._tinyfish_gmx_apy()
         if scraped:
             return scraped
 
-        raise YieldDataUnavailable("Live GMX yield unavailable from API and TinyFish")
+        raise YieldDataUnavailable(
+            f"Live GMX yield unavailable. Errors: {'; '.join(errors)}"
+        )
 
     async def get_uniswap_apy(self, token0: str, token1: str, fee_tier: int = 3000) -> dict[str, Any]:
-        query = """
-        query GetPool($token0: String!, $token1: String!, $fee: Int!) {
-          pools(where: {
-            token0_: {symbol: $token0}
-            token1_: {symbol: $token1}
-            feeTier: $fee
-          }, orderBy: totalValueLockedUSD, orderDirection: desc, first: 1) {
-            feeTier
-            totalValueLockedUSD
-            poolDayData(first: 7, orderBy: date, orderDirection: desc) {
-              feesUSD
-            }
-          }
-        }
-        """
-        subgraphs = [
-            "https://api.studio.thegraph.com/query/48347/uniswap-v3-arbitrum/version/latest",
-            "https://api.thegraph.com/subgraphs/name/ianlapham/arbitrum-minimal",
-        ]
-        for url in subgraphs:
-            try:
-                async with httpx.AsyncClient(timeout=15) as client:
-                    r = await client.post(
-                        url,
-                        json={
-                            "query": query,
-                            "variables": {"token0": token0, "token1": token1, "fee": fee_tier},
-                        },
-                    )
-                    if r.status_code == 200:
-                        pools = r.json().get("data", {}).get("pools", [])
-                        if pools:
-                            pool = pools[0]
-                            daily_fees = sum(float(d["feesUSD"]) for d in pool.get("poolDayData", []))
-                            tvl = float(pool["totalValueLockedUSD"])
-                            weekly_apy = (daily_fees / 7 / tvl) * 365 * 100 if tvl > 0 else 0
-                            return {
-                                "token0": token0,
-                                "token1": token1,
-                                "fee_tier_bps": fee_tier,
-                                "estimated_apy": round(weekly_apy, 2),
-                                "tvl_usd": tvl,
-                                "protocol": "uniswap_v3",
-                                "chain": self.chain_name,
-                                "source": "subgraph",
-                            }
-            except Exception as exc:
-                logger.warning("Uniswap subgraph %s failed: %s", url, exc)
+        if self.chain_id == ARBITRUM_ONE_CHAIN_ID:
+            pool = await self._fetch_uniswap_defillama(token0, token1, fee_tier)
+            if pool:
+                return {
+                    "token0": token0.upper(),
+                    "token1": token1.upper(),
+                    "fee_tier_bps": fee_tier,
+                    "estimated_apy": round(float(pool.get("apy", 0)), 2),
+                    "tvl_usd": float(pool.get("tvlUsd", 0)),
+                    "protocol": "uniswap_v3",
+                    "chain": self.chain_name,
+                    "source": "defillama",
+                    "pool_meta": pool.get("poolMeta"),
+                    "symbol": pool.get("symbol"),
+                }
 
         raise YieldDataUnavailable(
             f"Live Uniswap pool data unavailable for {token0}/{token1} fee {fee_tier}"
         )
+
+    async def _get_defillama_pools(self) -> list[dict[str, Any]]:
+        global _DEFILLAMA_POOLS_CACHE
+
+        now = time.time()
+        if _DEFILLAMA_POOLS_CACHE and now - _DEFILLAMA_POOLS_CACHE[0] < _DEFILLAMA_CACHE_TTL_SECONDS:
+            return _DEFILLAMA_POOLS_CACHE[1]
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(DEFILLAMA_POOLS_URL)
+            response.raise_for_status()
+            pools = response.json().get("data", [])
+
+        _DEFILLAMA_POOLS_CACHE = (now, pools)
+        return pools
+
+    async def _fetch_uniswap_defillama(
+        self, token0: str, token1: str, fee_tier: int
+    ) -> dict[str, Any] | None:
+        fee_meta = UNISWAP_FEE_POOL_META.get(fee_tier)
+        if not fee_meta:
+            return None
+
+        pools = await self._get_defillama_pools()
+        matches = [
+            pool
+            for pool in pools
+            if pool.get("chain") == "Arbitrum"
+            and pool.get("project") == "uniswap-v3"
+            and pool.get("poolMeta") == fee_meta
+            and _symbol_matches_pair(str(pool.get("symbol", "")), token0, token1)
+        ]
+        if not matches:
+            return None
+
+        return max(matches, key=lambda pool: float(pool.get("tvlUsd", 0) or 0))
 
     async def _tinyfish_aave_apy(self, asset: str) -> dict[str, Any] | None:
         market = (
@@ -291,7 +361,7 @@ class YieldFetcher:
 
     async def _tinyfish_gmx_apy(self) -> dict[str, Any] | None:
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=12) as client:
                 r = await client.post(
                     "https://agent.tinyfish.ai/v1/automation/run",
                     headers={"X-API-Key": self.settings.tinyfish_api_key},
@@ -309,7 +379,7 @@ class YieldFetcher:
                     apy = float(result.get("apy", 0))
                     if apy > 0:
                         return {
-                            "protocol": "gmx_glp",
+                            "protocol": "gmx_gm",
                             "apy": apy,
                             "chain": self.chain_name,
                             "risk": "medium",
