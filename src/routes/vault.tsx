@@ -4,16 +4,15 @@ import { useMemo, useState } from "react";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { Filter, Shield, TrendingUp, Activity, Layers, ArrowUpRight } from "lucide-react";
 import { axisApi } from "../lib/api";
+import { brandHeadMeta } from "../lib/seo";
 
 export const Route = createFileRoute("/vault")({
-  head: () => ({
-    meta: [
-      { title: "Vault — AXIS Strategies" },
-      { name: "description", content: "Live DeFi yields AXIS monitors on Arbitrum." },
-      { property: "og:title", content: "Vault — AXIS" },
-      { property: "og:description", content: "The strategy archive." },
-    ],
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "Vault — AXIS Strategies",
+      description: "Live DeFi yields AXIS monitors on Arbitrum.",
+      path: "/vault",
+    }),
   component: VaultPage,
 });
 

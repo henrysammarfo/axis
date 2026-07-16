@@ -6,6 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { HeroVideos } from "../components/scroll/HeroVideos";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { ScatteredGrid } from "../components/scroll/ScatteredGrid";
+import { brandHeadMeta } from "../lib/seo";
 
 if (typeof window !== "undefined") gsap.registerPlugin(ScrollTrigger);
 
@@ -26,17 +27,13 @@ const SYMBOLS = ["8", "$", "^^", "%", "/"];
 const EASE = [0.25, 0.1, 0.25, 1] as const;
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "AXIS — Autonomous DeFi Portfolio Agent" },
-      {
-        name: "description",
-        content: "Set a budget. Set a goal. AXIS executes DeFi strategy across every chain. No wallets. No gas.",
-      },
-      { property: "og:title", content: "AXIS — Set. Forget. Earn." },
-      { property: "og:description", content: "The first DeFi agent normal people can actually use." },
-    ],
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "AXIS — Autonomous DeFi Portfolio Agent",
+      description:
+        "Set a budget. Set a goal. AXIS executes DeFi strategy across every chain. No wallets. No gas.",
+      path: "/",
+    }),
   component: Index,
 });
 

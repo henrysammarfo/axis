@@ -1,16 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { ArrowUpRight } from "lucide-react";
+import { brandHeadMeta } from "../lib/seo";
 
 export const Route = createFileRoute("/manifesto")({
-  head: () => ({
-    meta: [
-      { title: "Manifesto — AXIS" },
-      { name: "description", content: "The AXIS manifesto: autonomous DeFi, invisible infrastructure, human-first UX." },
-      { property: "og:title", content: "Manifesto — AXIS" },
-      { property: "og:description", content: "Why we built an agent that thinks in chains and speaks in outcomes." },
-    ],
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "Manifesto — AXIS",
+      description: "Why we built an agent that thinks in chains and speaks in outcomes.",
+      path: "/manifesto",
+    }),
   component: ManifestoPage,
 });
 

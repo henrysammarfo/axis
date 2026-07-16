@@ -43,6 +43,7 @@ import {
 import { toast } from "sonner";
 
 import { truncateAddress } from "../../lib/api";
+import { brandHeadMeta } from "../../lib/seo";
 
 const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
 const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
@@ -57,17 +58,13 @@ const dashSearch = z.object({
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   validateSearch: zodValidator(dashSearch),
-  head: () => ({
-    meta: [
-      { title: "Portfolio — AXIS" },
-      {
-        name: "description",
-        content: "Your autonomous DeFi portfolio, running across every chain.",
-      },
-      { property: "og:title", content: "Portfolio — AXIS" },
-      { property: "og:description", content: "Your agent's live positions and yield." },
-    ],
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "Portfolio — AXIS",
+      description: "Your agent's live positions and yield.",
+      path: "/dashboard",
+      noIndex: true,
+    }),
   component: Dashboard,
 });
 

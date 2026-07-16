@@ -13,6 +13,7 @@
  * https://github.com/Particle-Network/ua-7702-magic-demo
  */
 
+import "./process-polyfill";
 import { Magic } from "magic-sdk";
 import { OAuthExtension } from "@magic-ext/oauth2";
 import { EVMExtension } from "@magic-ext/evm";

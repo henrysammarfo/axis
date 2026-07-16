@@ -9,6 +9,12 @@ if (-not (Test-Path $envFile)) {
 }
 
 $api = "https://axis-api-teamtitanlink.vercel.app"
+$projectName = "axis-mainnet"
+if (Test-Path (Join-Path $root ".vercel\project.json")) {
+  $pj = Get-Content (Join-Path $root ".vercel\project.json") -Raw | ConvertFrom-Json
+  if ($pj.projectName) { $projectName = $pj.projectName }
+}
+$siteUrl = if ($projectName -eq "axis-mainnet") { "https://axis-mainnet.vercel.app" } else { "https://axis-teamtitanlink.vercel.app" }
 $required = @(
   "VITE_MAGIC_PUBLISHABLE_KEY",
   "VITE_PARTICLE_PROJECT_ID",
@@ -21,7 +27,7 @@ $required = @(
   "VITE_ARBITRUM_CHAIN_ID"
 )
 
-$map = @{ "VITE_API_URL" = $api }
+$map = @{ "VITE_API_URL" = $api; "VITE_SITE_URL" = $siteUrl }
 Get-Content $envFile | ForEach-Object {
   $line = $_.Trim()
   if (-not $line -or $line.StartsWith("#") -or -not $line.Contains("=")) { return }
@@ -60,12 +66,7 @@ Write-Host "Deploying frontend (Arbitrum One 42161) as henrysammarfo..."
 & vercel @argsList
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Alias whichever project is currently linked
-$projectName = "axis"
-if (Test-Path (Join-Path $root ".vercel\project.json")) {
-  $pj = Get-Content (Join-Path $root ".vercel\project.json") -Raw | ConvertFrom-Json
-  if ($pj.projectName) { $projectName = $pj.projectName }
-}
+# Alias production domain for the linked project
 $alias = if ($projectName -eq "axis-mainnet") { "axis-mainnet.vercel.app" } else { "axis-teamtitanlink.vercel.app" }
 $deployOut = & vercel ls $projectName --scope teamtitanlink 2>&1 | Out-String
 if ($deployOut -match "https://(($projectName)-[a-z0-9]+-teamtitanlink\.vercel\.app)") {

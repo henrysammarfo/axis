@@ -3,6 +3,7 @@ import { useState } from "react";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { Logo } from "../components/brand/Logo";
 import { Mail, Check, Package, Timer } from "lucide-react";
+import { brandHeadMeta } from "../lib/seo";
 
 const MERCH = [
   { id: "m1", name: "AXIS Wordmark Hoodie", drop: "Q1", status: "Coming Soon" },
@@ -12,14 +13,12 @@ const MERCH = [
 ] as const;
 
 export const Route = createFileRoute("/merch")({
-  head: () => ({
-    meta: [
-      { title: "Merch — Coming Soon — AXIS" },
-      { name: "description", content: "AXIS merch drops soon. Hoodies, tees, caps — join the waitlist." },
-      { property: "og:title", content: "AXIS Merch — Coming Soon" },
-      { property: "og:description", content: "Wear the agent. Waitlist open." },
-    ],
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "Merch — Coming Soon — AXIS",
+      description: "Wear the agent. Waitlist open.",
+      path: "/merch",
+    }),
   component: MerchPage,
 });
 

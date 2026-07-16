@@ -11,8 +11,10 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import "../lib/process-polyfill";
 import { assertFrontendEnv } from "../lib/env";
 import { reportClientError } from "../lib/error-reporting";
+import { brandHeadMeta } from "../lib/seo";
 import { CustomCursor } from "../components/brand/CustomCursor";
 import { MobileBottomNav } from "../components/brand/MobileMenu";
 import { Toaster } from "../components/ui/sonner";
@@ -61,27 +63,18 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+const brand = brandHeadMeta();
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "AXIS — Autonomous DeFi Portfolio Agent" },
-      {
-        name: "description",
-        content:
-          "AXIS is an AI agent that manages your DeFi portfolio across every chain. Google sign-in, no MetaMask, no gas. Set. Forget. Earn.",
-      },
-      { name: "author", content: "AXIS" },
-      { property: "og:title", content: "AXIS — Set. Forget. Earn." },
-      { property: "og:description", content: "Autonomous cross-chain DeFi agent. No wallets. No gas. Just yield." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@axis" },
+      ...brand.meta,
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      ...brand.links,
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -96,10 +89,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+const PROCESS_POLYFILL = `(()=>{var g=typeof globalThis!=="undefined"?globalThis:window;if(!g.process)g.process={env:{}};if(!g.process.env)g.process.env={};if(!g.process.env.NODE_ENV)g.process.env.NODE_ENV="production";})();`;
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: PROCESS_POLYFILL }} />
         <HeadContent />
       </head>
       <body>

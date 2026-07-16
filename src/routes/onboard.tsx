@@ -12,6 +12,7 @@ import {
   walletConfigErrors,
 } from "../lib/wallet";
 import { useAxisConfig } from "../hooks/useAxis";
+import { brandHeadMeta } from "../lib/seo";
 
 export const Route = createFileRoute("/onboard")({
   beforeLoad: () => {
@@ -21,14 +22,10 @@ export const Route = createFileRoute("/onboard")({
       throw redirect({ to: "/dashboard" });
     }
   },
-  head: () => ({
-    meta: [
-      { title: "Get Started — AXIS" },
-      {
-        name: "description",
-        content: "Sign in with Google and activate your autonomous DeFi agent.",
-      },
-    ],
+  head: () => brandHeadMeta({
+    title: "Get Started — AXIS",
+    description: "Sign in with Google and activate your autonomous DeFi agent.",
+    path: "/onboard",
   }),
   component: Onboard,
 });

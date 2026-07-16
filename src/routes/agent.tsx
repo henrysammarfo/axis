@@ -2,16 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
 import { ScatteredGrid } from "../components/scroll/ScatteredGrid";
 import { Sparkles, Zap, Shield, Wallet, TrendingUp, CircleDot } from "lucide-react";
+import { brandHeadMeta } from "../lib/seo";
 
 export const Route = createFileRoute("/agent")({
-  head: () => ({
-    meta: [
-      { title: "The Agent — AXIS" },
-      { name: "description", content: "How the AXIS agent thinks, plans, and executes cross-chain DeFi." },
-      { property: "og:title", content: "The Agent — AXIS" },
-      { property: "og:description", content: "Claude Agent SDK + Universal Accounts + EIP-7702." },
-    ],
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "The Agent — AXIS",
+      description: "Claude Agent SDK + Universal Accounts + EIP-7702.",
+      path: "/agent",
+    }),
   component: AgentPage,
 });
 
