@@ -623,10 +623,21 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
   }
 
   try {
-    const { createSmartRoutingAddress: createSra } = await import(
+    const { createSmartRoutingAddress: createSra, createCall, FLEX } = await import(
       "@zerodev/smart-routing-address"
     );
     const { arbitrum, base, optimism, mainnet } = await import("viem/chains");
+    const { erc20Abi } = await import("viem");
+
+    // ZeroDev SRA API requires non-empty calls (empty action[] → "Invalid params").
+    // Transfer-to-owner matches the official SRA example.
+    const transferUsdc = createCall({
+      target: FLEX.TOKEN_ADDRESS,
+      value: 0n,
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [checksummedOwner, FLEX.AMOUNT],
+    });
 
     const { smartRoutingAddress } = await createSra({
       owner: checksummedOwner,
@@ -637,7 +648,12 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
         { tokenType: "USDC", chain: arbitrum },
         { tokenType: "USDC", chain: mainnet },
       ],
-      actions: { USDC: { action: [], fallBack: [] } },
+      actions: {
+        USDC: {
+          action: [transferUsdc],
+          fallBack: [transferUsdc],
+        },
+      },
       slippage: 50,
       allowPartialRoutes: true,
     });
@@ -647,6 +663,19 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
     }
     return smartRoutingAddress;
   } catch (error) {
+    const details =
+      error &&
+      typeof error === "object" &&
+      "details" in error &&
+      error.details &&
+      typeof error.details === "object" &&
+      "message" in error.details &&
+      typeof (error.details as { message?: unknown }).message === "string"
+        ? (error.details as { message: string }).message
+        : undefined;
+    if (details) {
+      throw new Error(`ZeroDev Smart Routing Address setup failed: ${details}`);
+    }
     throw formatWalletError(error, "ZeroDev Smart Routing Address setup failed");
   }
 }
