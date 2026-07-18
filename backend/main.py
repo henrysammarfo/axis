@@ -39,7 +39,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    # Scope previews to AXIS Vercel projects only (e.g. axis-mainnet-<hash>-*.vercel.app);
+    # do NOT allow arbitrary *.vercel.app origins.
+    allow_origin_regex=r"https://axis[a-z0-9-]*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

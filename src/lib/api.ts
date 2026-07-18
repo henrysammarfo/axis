@@ -37,7 +37,7 @@ export type ConfigStatus = {
   ai: { venice: boolean; openai: boolean; active_provider: string };
   wallet: { magic: boolean; particle: boolean; zerodev: boolean; google_oauth: boolean };
   chain: {
-    arbitrum_rpc: string;
+    rpc_provider: string;
     chain_id: number;
     dedicated_rpc: boolean;
     is_mainnet: boolean;

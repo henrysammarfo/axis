@@ -1,11 +1,24 @@
 """Health and configuration status endpoints."""
 
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter
 
 from config import get_settings
 from chain_config import ARBITRUM_ONE_CHAIN_ID
 
 router = APIRouter(tags=["health"])
+
+
+def _rpc_provider(url: str) -> str:
+    """Return only the provider host, never the API key embedded in the RPC URL."""
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+        return f"{parts.scheme}://{parts.netloc}" if parts.netloc else "configured"
+    except ValueError:
+        return "configured"
 
 
 def _magic_auth_status() -> dict:
@@ -63,7 +76,7 @@ async def config_status():
             "google_oauth": bool(settings.google_client_id),
         },
         "chain": {
-            "arbitrum_rpc": settings.arbitrum_rpc,
+            "rpc_provider": _rpc_provider(settings.arbitrum_rpc),
             "chain_id": settings.arbitrum_chain_id,
             "dedicated_rpc": settings.chain_configured,
             "is_mainnet": settings.arbitrum_chain_id == ARBITRUM_ONE_CHAIN_ID,

@@ -1,23 +1,52 @@
 """SQLAlchemy async database session management."""
 
 from collections.abc import AsyncGenerator
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from config import get_settings
 
+# libpq params that psycopg2 understands but asyncpg does not accept as query args.
+_ASYNCPG_INCOMPATIBLE_PARAMS = {"sslmode", "channel_binding", "gssencmode", "target_session_attrs"}
+
 
 def _async_url(url: str) -> str:
+    """Normalize a DB URL to its async driver, stripping asyncpg-incompatible params.
+
+    Managed Postgres URLs (Neon, Supabase, Vercel) ship `?sslmode=require&channel_binding=...`,
+    which crash asyncpg. We strip them here and enable TLS via connect_args instead.
+    """
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
     if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if url.startswith("sqlite://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("sqlite://"):
         return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+
+    if url.startswith("postgresql+asyncpg://"):
+        parts = urlsplit(url)
+        kept = [(k, v) for k, v in parse_qsl(parts.query) if k.lower() not in _ASYNCPG_INCOMPATIBLE_PARAMS]
+        url = urlunsplit(parts._replace(query=urlencode(kept)))
     return url
 
 
+def _connect_args(url: str) -> dict[str, Any]:
+    # Managed Postgres requires TLS; asyncpg enables it via ssl=True (not a URL param).
+    if url.startswith(("postgresql://", "postgres://", "postgresql+asyncpg://")):
+        return {"ssl": True}
+    return {}
+
+
 settings = get_settings()
-engine = create_async_engine(_async_url(settings.database_url), echo=settings.environment == "development")
+engine = create_async_engine(
+    _async_url(settings.database_url),
+    echo=settings.environment == "development",
+    connect_args=_connect_args(settings.database_url),
+    pool_pre_ping=True,
+)
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -46,12 +75,14 @@ async def init_db() -> None:
             inspector = inspect(sync_conn)
             if "users" not in inspector.get_table_names():
                 return
+            # Dialect-safe boolean default (Postgres rejects `DEFAULT 0` on BOOLEAN).
+            false_default = "false" if sync_conn.dialect.name == "postgresql" else "0"
             existing = {col["name"] for col in inspector.get_columns("users")}
             if "eip7702_tx_hash" not in existing:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN eip7702_tx_hash VARCHAR(66)"))
             if "eip7702_delegated" not in existing:
                 sync_conn.execute(
-                    text("ALTER TABLE users ADD COLUMN eip7702_delegated BOOLEAN DEFAULT 0")
+                    text(f"ALTER TABLE users ADD COLUMN eip7702_delegated BOOLEAN DEFAULT {false_default}")
                 )
             if "session_key_approval" not in existing:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN session_key_approval TEXT"))
@@ -61,7 +92,7 @@ async def init_db() -> None:
                 )
             if "session_active" not in existing:
                 sync_conn.execute(
-                    text("ALTER TABLE users ADD COLUMN session_active BOOLEAN DEFAULT 0")
+                    text(f"ALTER TABLE users ADD COLUMN session_active BOOLEAN DEFAULT {false_default}")
                 )
             if "custom_strategy" not in existing:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN custom_strategy JSON"))
