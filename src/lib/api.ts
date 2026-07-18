@@ -273,6 +273,44 @@ export const axisApi = {
       body: JSON.stringify(body),
     }),
 
+  prepareGmxDeposit: (body: { user_id: string; ua_address: string; usdc_amount?: number }) =>
+    request<{
+      status: "pending_signatures" | string;
+      transactions: import("./strategy").ActivationTransaction[];
+      usdc_amount: number;
+      execution_fee_wei: string;
+      execution_fee_eth: number;
+      explanation: string;
+    }>("/api/agent/gmx/deposit/prepare", { method: "POST", body: JSON.stringify(body) }),
+
+  confirmGmxDeposit: (body: {
+    user_id: string;
+    ua_address: string;
+    usdc_amount: number;
+    tx_hash: string;
+    estimated_apy?: number;
+  }) =>
+    request<{ status: string; explanation: string }>("/api/agent/gmx/deposit/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  prepareGmxWithdraw: (body: { user_id: string; ua_address: string }) =>
+    request<{
+      status: "pending_signatures" | "no_action" | string;
+      transactions: import("./strategy").ActivationTransaction[];
+      gm_amount_raw?: string;
+      execution_fee_wei?: string;
+      execution_fee_eth?: number;
+      explanation: string;
+    }>("/api/agent/gmx/withdraw/prepare", { method: "POST", body: JSON.stringify(body) }),
+
+  confirmGmxWithdraw: (body: { user_id: string; ua_address: string; tx_hash: string }) =>
+    request<{ status: string; explanation: string }>("/api/agent/gmx/withdraw/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   saveCustomStrategy: (body: {
     user_id: string;
     ua_address: string;

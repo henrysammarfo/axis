@@ -45,6 +45,8 @@ import {
   useEnableMarketRiskSession,
   useOpenLpViaSession,
   useCloseLpViaSession,
+  useDepositGmx,
+  useWithdrawGmx,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 
@@ -146,6 +148,8 @@ function Dashboard() {
   const enableLp = useEnableMarketRiskSession();
   const openLp = useOpenLpViaSession();
   const closeLp = useCloseLpViaSession();
+  const depositGmx = useDepositGmx();
+  const withdrawGmx = useWithdrawGmx();
   const activatedRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
@@ -158,6 +162,7 @@ function Dashboard() {
   const handsOff = Boolean(axisStatus?.session_active);
   const [usdcWeight, setUsdcWeight] = useState(60);
   const [lpAmount, setLpAmount] = useState(0);
+  const [gmxAmount, setGmxAmount] = useState(0);
   const marketRiskOn = Boolean(axisStatus?.market_risk_consent);
   const isAggressive = (axisStatus?.risk_level || "").toLowerCase() === "aggressive";
 
@@ -391,6 +396,48 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't close the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  const onDepositGmx = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await depositGmx.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        usdc_amount: gmxAmount > 0 ? gmxAmount : undefined,
+      });
+      toast.success("GMX deposit submitted", {
+        description: (res.explanation || "GM tokens settle in a few seconds.").slice(0, 160),
+      });
+    } catch (e) {
+      toast.error("Couldn't add to GMX", {
+        description:
+          e instanceof Error ? e.message : "Make sure you hold a little ETH for the fee, then retry.",
+      });
+    }
+  };
+
+  const onWithdrawGmx = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await withdrawGmx.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+      });
+      if (res.status === "no_action") {
+        toast.info("No GMX position", {
+          description: res.explanation || "You don't have a GMX position open.",
+        });
+        return;
+      }
+      toast.success("GMX withdrawal submitted", {
+        description: (res.explanation || "Funds settle back to you shortly.").slice(0, 160),
+      });
+    } catch (e) {
+      toast.error("Couldn't close GMX", {
         description: e instanceof Error ? e.message : "Please try again.",
       });
     }
@@ -843,6 +890,58 @@ function Dashboard() {
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* GMX V2 GM pool — Pro, user-signed market-risk action (opt-in) */}
+                {isAggressive && marketRiskOn && (
+                  <div className="mt-6 pt-6 border-t border-white/10">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1">
+                      <p className="text-[10px] uppercase tracking-widest text-white/40 inline-flex items-center gap-2 truncate">
+                        <Zap size={12} strokeWidth={1.75} /> GMX pool · Pro
+                      </p>
+                      <span className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">
+                        GMX V2 · ETH/USD
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      Provide liquidity to GMX's ETH/USD pool for a higher, variable yield. This is a
+                      Pro move: you sign it yourself, your account needs a little ETH for the network
+                      keeper fee (excess refunded), and it carries real market risk — the value can
+                      move with the pool. Funds are always minted and returned to you.
+                    </p>
+                    <div className="mt-4 flex items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-widest text-white/40">USDC</span>
+                      <input
+                        type="number"
+                        min={5}
+                        step={1}
+                        value={gmxAmount || ""}
+                        placeholder="Auto"
+                        onChange={(e) => setGmxAmount(Number(e.target.value))}
+                        className="w-28 bg-transparent border border-white/20 rounded-full px-4 py-2 text-sm outline-none focus:border-white/40"
+                        aria-label="USDC amount for GMX GM pool"
+                      />
+                      <span className="text-[10px] uppercase tracking-widest text-white/30">
+                        leave blank = suggested
+                      </span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={onDepositGmx}
+                        disabled={depositGmx.isPending || !session.uaAddress}
+                        className="bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {depositGmx.isPending ? "Confirm in wallet…" : "Add to GMX pool"}
+                      </button>
+                      <button
+                        onClick={onWithdrawGmx}
+                        disabled={withdrawGmx.isPending || !session.uaAddress}
+                        className="border border-white/20 hover:bg-white/5 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {withdrawGmx.isPending ? "Confirm in wallet…" : "Close GMX"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

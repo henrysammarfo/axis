@@ -267,6 +267,28 @@ def recommend_lp_usdc(risk_level: str | RiskLevel, goal: str | Goal, budget_usdc
     return round(max(0.0, budget_usdc) * share, 2)
 
 
+# GMX V2 GM ETH/USD pool — a Pro, user-signed market-risk strategy (Aggressive +
+# consent). Higher yield than stable LP, but real exposure to the pool's PnL.
+GMX_GM_PROTOCOL = "gmx_v2"
+GMX_GM_ASSET = "GM:ETH/USD"
+# Conservative default share of the deployed budget to route into GMX, by goal.
+_GMX_SUGGESTED_SHARE: dict[Goal, float] = {
+    Goal.PROTECT: 0.0,
+    Goal.GROW: 0.10,
+    Goal.MAXIMIZE: 0.20,
+}
+
+
+def recommend_gmx_usdc(risk_level: str | RiskLevel, goal: str | Goal, budget_usdc: float) -> float:
+    """Suggested USDC to route into the GMX GM pool (Aggressive tier only; 0 otherwise)."""
+    risk = risk_level if isinstance(risk_level, RiskLevel) else parse_risk_level(risk_level)
+    goal_e = goal if isinstance(goal, Goal) else parse_goal(goal)
+    if risk != RiskLevel.AGGRESSIVE:
+        return 0.0
+    share = _GMX_SUGGESTED_SHARE.get(goal_e, 0.0)
+    return round(max(0.0, budget_usdc) * share, 2)
+
+
 # Power-user custom strategies: bounded to vetted, non-suicidal building blocks.
 CUSTOM_ALLOWED_ASSETS = frozenset({"USDC", "USDT"})
 CUSTOM_ALLOWED_PROTOCOLS = frozenset({"aave"})

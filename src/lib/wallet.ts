@@ -1022,6 +1022,69 @@ export async function closeLpViaSession(body: {
   return { ...confirmed, tx_hash: result.tx_hash };
 }
 
+/**
+ * Add USDC liquidity to the GMX ETH/USD GM pool. Pro, user-signed action:
+ * the user signs the approve + createDeposit multicall in their Magic wallet
+ * (receiver = themselves). Their account needs a little ETH for gas + the keeper
+ * execution fee. GM tokens settle a few seconds later via the GMX keeper.
+ */
+export async function depositGmxViaWallet(body: {
+  user_id: string;
+  ua_address: string;
+  usdc_amount?: number;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  if (!isArbitrumOne()) {
+    throw new Error("GMX is available on Arbitrum One only.");
+  }
+  const prepared = await axisApi.prepareGmxDeposit(body);
+  if (prepared.status !== "pending_signatures" || !prepared.transactions?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const signed = await signActivationTransactions(prepared.transactions);
+  const createTx = signed.find((t) => t.purpose === "gmx_multicall") ?? signed[signed.length - 1];
+  if (!createTx?.tx_hash) {
+    throw new Error("GMX deposit did not return a transaction hash.");
+  }
+
+  const confirmed = await axisApi.confirmGmxDeposit({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    usdc_amount: prepared.usdc_amount,
+    tx_hash: createTx.tx_hash,
+  });
+  return { ...confirmed, tx_hash: createTx.tx_hash };
+}
+
+/**
+ * Redeem the account's full GMX ETH/USD GM position back to the user (user-signed).
+ */
+export async function withdrawGmxViaWallet(body: {
+  user_id: string;
+  ua_address: string;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  if (!isArbitrumOne()) {
+    throw new Error("GMX is available on Arbitrum One only.");
+  }
+  const prepared = await axisApi.prepareGmxWithdraw(body);
+  if (prepared.status !== "pending_signatures" || !prepared.transactions?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const signed = await signActivationTransactions(prepared.transactions);
+  const createTx = signed.find((t) => t.purpose === "gmx_multicall") ?? signed[signed.length - 1];
+  if (!createTx?.tx_hash) {
+    throw new Error("GMX withdrawal did not return a transaction hash.");
+  }
+
+  const confirmed = await axisApi.confirmGmxWithdraw({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    tx_hash: createTx.tx_hash,
+  });
+  return { ...confirmed, tx_hash: createTx.tx_hash };
+}
+
 export async function logout(): Promise<void> {
   if (!isBrowser()) {
     clearSession();

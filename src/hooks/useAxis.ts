@@ -6,6 +6,8 @@ import {
   enableMarketRiskSession,
   openLpViaSession,
   closeLpViaSession,
+  depositGmxViaWallet,
+  withdrawGmxViaWallet,
   getStoredSession,
 } from "../lib/wallet";
 
@@ -152,6 +154,30 @@ export function useCloseLpViaSession() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: closeLpViaSession,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
+    },
+  });
+}
+
+/** Add USDC liquidity to the GMX ETH/USD GM pool (Pro, user-signed). */
+export function useDepositGmx() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: depositGmxViaWallet,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
+    },
+  });
+}
+
+/** Redeem the GMX ETH/USD GM position back to the user (Pro, user-signed). */
+export function useWithdrawGmx() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: withdrawGmxViaWallet,
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });

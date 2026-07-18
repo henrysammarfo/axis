@@ -24,6 +24,8 @@ from services.ai_agent import AxisAgent
 from services.defi_executor import DeFiExecutor
 from services.portfolio_tracker import PortfolioTracker
 from services.strategy_engine import (
+    GMX_GM_ASSET,
+    GMX_GM_PROTOCOL,
     MIN_BUDGET_USDC,
     RiskLevel,
     UNISWAP_LP_ASSET,
@@ -32,8 +34,14 @@ from services.strategy_engine import (
     build_plan_from_custom,
     parse_goal,
     parse_risk_level,
+    recommend_gmx_usdc,
     recommend_lp_usdc,
     validate_custom_legs,
+)
+from services.gmx_gm import (
+    build_gm_deposit_txs,
+    build_gm_withdraw_txs,
+    get_gm_balance,
 )
 from services.uniswap_lp import build_lp_enter_calls, build_lp_exit_calls, find_lp_position
 from services.tenant_guard import assert_same_user, assert_wallet_belongs_to_user
@@ -125,6 +133,31 @@ class LpExitPrepareRequest(BaseModel):
 
 
 class LpExitConfirmRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    tx_hash: str
+
+
+class GmxDepositPrepareRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    usdc_amount: float | None = Field(default=None, ge=0)
+
+
+class GmxDepositConfirmRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    usdc_amount: float = Field(gt=0)
+    tx_hash: str
+    estimated_apy: float = 0.0
+
+
+class GmxWithdrawPrepareRequest(BaseModel):
+    user_id: str
+    ua_address: str
+
+
+class GmxWithdrawConfirmRequest(BaseModel):
     user_id: str
     ua_address: str
     tx_hash: str
@@ -771,6 +804,213 @@ async def confirm_lp_exit(
     return {
         "status": "lp_closed",
         "explanation": "Your stable LP is closed and the funds are back in your wallet.",
+    }
+
+
+MIN_GMX_USDC = 5.0  # keep deposits meaningfully above the keeper execution fee
+
+
+def _require_gmx_eligible(user) -> None:
+    """GMX GM is a Pro, market-risk action: Aggressive tier + one-time consent."""
+    if not user:
+        raise HTTPException(status_code=404, detail="User not registered")
+    if not user.market_risk_consent:
+        raise HTTPException(
+            status_code=403,
+            detail="GMX carries market risk and needs your one-time consent first.",
+        )
+    if parse_risk_level(user.risk_level or "moderate") != RiskLevel.AGGRESSIVE:
+        raise HTTPException(
+            status_code=403,
+            detail="GMX GM pools are available on the Aggressive risk level only.",
+        )
+
+
+@router.post("/gmx/deposit/prepare")
+@limiter.limit("20/minute")
+async def prepare_gmx_deposit(
+    request_body: GmxDepositPrepareRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """
+    Build user-signed txs to add USDC liquidity to the GMX GM ETH/USD pool.
+
+    Pro action (Aggressive + consent). Unlike Aave/LP this is NOT gasless: the
+    user signs it and their account needs a little ETH for gas + the keeper
+    execution fee. GM tokens are minted to the user (receiver = owner).
+    """
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+    _require_gmx_eligible(user)
+
+    idle = get_token_balance_usdc(request_body.ua_address, "USDC")
+    suggested = recommend_gmx_usdc(user.risk_level, user.goal or "grow", user.budget_usdc or 0.0)
+    amount = request_body.usdc_amount if request_body.usdc_amount else suggested
+    amount = round(min(float(amount or 0.0), idle), 2)
+
+    if amount < MIN_GMX_USDC:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Need at least ${MIN_GMX_USDC:.0f} idle USDC for a GMX deposit "
+                f"(idle: ${idle:.2f})."
+            ),
+        )
+
+    try:
+        txs, fee_wei = build_gm_deposit_txs(owner=request_body.ua_address, usdc_amount=amount)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "pending_signatures",
+        "transactions": txs,
+        "usdc_amount": amount,
+        "execution_fee_wei": str(fee_wei),
+        "execution_fee_eth": round(fee_wei / 1e18, 6),
+        "explanation": (
+            f"Adding ${amount:.2f} USDC to the GMX ETH/USD GM pool. You'll sign this in "
+            "your wallet; your account needs a little ETH for gas + the keeper fee "
+            "(any excess is refunded). GM tokens are minted to you and settle in a few seconds."
+        ),
+    }
+
+
+@router.post("/gmx/deposit/confirm")
+@limiter.limit("20/minute")
+async def confirm_gmx_deposit(
+    request_body: GmxDepositConfirmRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Verify the GMX createDeposit tx and record the (keeper-settled) position."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    try:
+        receipt = verify_tx_success(request_body.tx_hash)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await tracker.log_action(
+        request_body.user_id,
+        "execute_allocation",
+        {
+            "protocol": GMX_GM_PROTOCOL,
+            "asset": GMX_GM_ASSET,
+            "amount_usdc": round(float(request_body.usdc_amount), 2),
+            "action": "gm_deposit",
+        },
+        {
+            "success": True,
+            "tx_hash": request_body.tx_hash,
+            "chain": "arbitrum",
+            "estimated_apy": float(request_body.estimated_apy or 0.0),
+            "executed_via": "You · GMX V2 (keeper-settled)",
+            **receipt,
+        },
+        message=f"Added ${request_body.usdc_amount:.2f} to GMX ETH/USD GM pool",
+    )
+    return {
+        "status": "gmx_deposit_submitted",
+        "explanation": (
+            "Your GMX deposit is submitted. GM tokens are minted to you once the keeper "
+            "settles it (usually a few seconds)."
+        ),
+    }
+
+
+@router.post("/gmx/withdraw/prepare")
+@limiter.limit("20/minute")
+async def prepare_gmx_withdraw(
+    request_body: GmxWithdrawPrepareRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Build user-signed txs to redeem the account's full GMX GM ETH/USD position."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    gm_balance = get_gm_balance(request_body.ua_address)
+    if gm_balance <= 0:
+        return {
+            "status": "no_action",
+            "transactions": [],
+            "explanation": "No GMX GM ETH/USD position found for your wallet.",
+        }
+
+    try:
+        txs, fee_wei = build_gm_withdraw_txs(owner=request_body.ua_address, gm_amount_raw=gm_balance)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "pending_signatures",
+        "transactions": txs,
+        "gm_amount_raw": str(gm_balance),
+        "execution_fee_wei": str(fee_wei),
+        "execution_fee_eth": round(fee_wei / 1e18, 6),
+        "explanation": (
+            "Closing your GMX ETH/USD GM position. You'll sign this in your wallet; "
+            "your ETH + USDC settle back to you once the keeper executes it."
+        ),
+    }
+
+
+@router.post("/gmx/withdraw/confirm")
+@limiter.limit("20/minute")
+async def confirm_gmx_withdraw(
+    request_body: GmxWithdrawConfirmRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Verify the GMX createWithdrawal tx and mark the position closed."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    try:
+        receipt = verify_tx_success(request_body.tx_hash)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    closed = await tracker.close_positions(request_body.user_id, GMX_GM_PROTOCOL, GMX_GM_ASSET)
+    await tracker.log_action(
+        request_body.user_id,
+        "close_position",
+        {"protocol": GMX_GM_PROTOCOL, "asset": GMX_GM_ASSET, "action": "gm_withdraw"},
+        {
+            "success": True,
+            "tx_hash": request_body.tx_hash,
+            "chain": "arbitrum",
+            "executed_via": "You · GMX V2 (keeper-settled)",
+            "positions_closed": closed,
+            **receipt,
+        },
+        message="Closed GMX ETH/USD GM position",
+    )
+    return {
+        "status": "gmx_withdraw_submitted",
+        "explanation": (
+            "Your GMX withdrawal is submitted. Funds settle back to your wallet once the "
+            "keeper executes it (usually a few seconds)."
+        ),
     }
 
 
