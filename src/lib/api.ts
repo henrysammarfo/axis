@@ -28,6 +28,7 @@ export type AgentStatus = {
   session_active?: boolean;
   session_approval?: string | null;
   custom_strategy?: import("./strategy").CustomStrategy | null;
+  market_risk_consent?: boolean;
   x402_spend?: { total_spent_usdc: number; queries_made: number };
 };
 
@@ -228,6 +229,32 @@ export const axisApi = {
     actions: Array<Record<string, unknown>>;
   }) =>
     request<{ status: string; explanation: string }>("/api/agent/rebalance/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  setMarketRiskConsent: (body: { user_id: string; ua_address: string; consent: boolean }) =>
+    request<{ status: string; market_risk_consent: boolean }>("/api/agent/consent/market-risk", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  prepareLp: (body: { user_id: string; ua_address: string; usdc_amount?: number }) =>
+    request<{
+      status: "pending_execution" | string;
+      calls: Array<{ to: string; data: string; value?: string; purpose?: string }>;
+      usdc_amount: number;
+      explanation: string;
+    }>("/api/agent/lp/prepare", { method: "POST", body: JSON.stringify(body) }),
+
+  confirmLp: (body: {
+    user_id: string;
+    ua_address: string;
+    usdc_amount: number;
+    tx_hash: string;
+    estimated_apy?: number;
+  }) =>
+    request<{ status: string; explanation: string }>("/api/agent/lp/confirm", {
       method: "POST",
       body: JSON.stringify(body),
     }),

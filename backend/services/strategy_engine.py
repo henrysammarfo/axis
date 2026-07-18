@@ -246,6 +246,27 @@ def preview_matrix_cell(
     return build_plan(risk_level, goal, budget_usdc, live_apys).to_dict()
 
 
+# Uniswap V3 USDC/USDT stable LP — the one market-risk option (Aggressive + consent).
+UNISWAP_LP_PROTOCOL = "uniswap_v3"
+UNISWAP_LP_ASSET = "USDC/USDT"
+# Suggested share of the deployed budget to route into the LP, by aggressive goal.
+_LP_SUGGESTED_SHARE: dict[Goal, float] = {
+    Goal.PROTECT: 0.0,  # protect stays fully in stable Aave
+    Goal.GROW: 0.25,
+    Goal.MAXIMIZE: 0.40,
+}
+
+
+def recommend_lp_usdc(risk_level: str | RiskLevel, goal: str | Goal, budget_usdc: float) -> float:
+    """Suggested USDC to route into the stable LP (Aggressive tier only; 0 otherwise)."""
+    risk = risk_level if isinstance(risk_level, RiskLevel) else parse_risk_level(risk_level)
+    goal_e = goal if isinstance(goal, Goal) else parse_goal(goal)
+    if risk != RiskLevel.AGGRESSIVE:
+        return 0.0
+    share = _LP_SUGGESTED_SHARE.get(goal_e, 0.0)
+    return round(max(0.0, budget_usdc) * share, 2)
+
+
 # Power-user custom strategies: bounded to vetted, non-suicidal building blocks.
 CUSTOM_ALLOWED_ASSETS = frozenset({"USDC", "USDT"})
 CUSTOM_ALLOWED_PROTOCOLS = frozenset({"aave"})

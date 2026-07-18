@@ -29,14 +29,19 @@ def _async_url(url: str) -> str:
     if url.startswith("postgresql+asyncpg://"):
         parts = urlsplit(url)
         kept = [(k, v) for k, v in parse_qsl(parts.query) if k.lower() not in _ASYNCPG_INCOMPATIBLE_PARAMS]
+        # Disable SQLAlchemy's prepared-statement cache so the Supabase/pgBouncer
+        # transaction pooler (port 6543) works — it can't reuse prepared statements.
+        if not any(k.lower() == "prepared_statement_cache_size" for k, _ in kept):
+            kept.append(("prepared_statement_cache_size", "0"))
         url = urlunsplit(parts._replace(query=urlencode(kept)))
     return url
 
 
 def _connect_args(url: str) -> dict[str, Any]:
     # Managed Postgres requires TLS; asyncpg enables it via ssl=True (not a URL param).
+    # statement_cache_size=0 keeps us compatible with transaction-mode poolers.
     if url.startswith(("postgresql://", "postgres://", "postgresql+asyncpg://")):
-        return {"ssl": True}
+        return {"ssl": True, "statement_cache_size": 0}
     return {}
 
 
@@ -96,5 +101,9 @@ async def init_db() -> None:
                 )
             if "custom_strategy" not in existing:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN custom_strategy JSON"))
+            if "market_risk_consent" not in existing:
+                sync_conn.execute(
+                    text(f"ALTER TABLE users ADD COLUMN market_risk_consent BOOLEAN DEFAULT {false_default}")
+                )
 
         await conn.run_sync(_migrate_user_columns)

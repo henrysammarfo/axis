@@ -42,6 +42,8 @@ import {
   useRebalanceAxis,
   useRebalanceViaSession,
   useSaveCustomStrategy,
+  useEnableMarketRiskSession,
+  useOpenLpViaSession,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 
@@ -140,6 +142,8 @@ function Dashboard() {
   const rebalanceMutation = useRebalanceAxis();
   const sessionRebalance = useRebalanceViaSession();
   const saveCustom = useSaveCustomStrategy();
+  const enableLp = useEnableMarketRiskSession();
+  const openLp = useOpenLpViaSession();
   const activatedRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
@@ -151,6 +155,9 @@ function Dashboard() {
 
   const handsOff = Boolean(axisStatus?.session_active);
   const [usdcWeight, setUsdcWeight] = useState(60);
+  const [lpAmount, setLpAmount] = useState(0);
+  const marketRiskOn = Boolean(axisStatus?.market_risk_consent);
+  const isAggressive = (axisStatus?.risk_level || "").toLowerCase() === "aggressive";
 
   const activeRisk = (axisStatus?.risk_level || risk || "moderate") as RiskLevel;
   const activeGoal = (axisStatus?.goal || goal || GOALS[0]) as GoalLabel;
@@ -328,6 +335,38 @@ function Dashboard() {
     } catch (e) {
       toast.error("Couldn't save that mix", {
         description: e instanceof Error ? e.message : "Weights must add up to 100%.",
+      });
+    }
+  };
+
+  const onEnableLp = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      await enableLp.mutateAsync({ user_id: userId, ua_address: session.uaAddress });
+      toast.success("Stable LP unlocked", {
+        description: "AXIS can now open a Uniswap USDC/USDT LP for you — funds stay in your wallet.",
+      });
+    } catch (e) {
+      toast.error("Couldn't unlock the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  const onOpenLp = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await openLp.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        usdc_amount: lpAmount > 0 ? lpAmount : undefined,
+      });
+      toast.success("AXIS opened your LP", {
+        description: (res.explanation || "Your USDC/USDT stable LP is open.").slice(0, 140),
+      });
+    } catch (e) {
+      toast.error("Couldn't open the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
       });
     }
   };
@@ -715,6 +754,63 @@ function Dashboard() {
                     {saveCustom.isPending ? "Saving…" : "Save my mix"}
                   </button>
                 </div>
+
+                {/* Uniswap V3 USDC/USDT stable LP — Bold tier, market-risk (opt-in) */}
+                {isAggressive && (
+                  <div className="mt-6 pt-6 border-t border-white/10">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1">
+                      <p className="text-[10px] uppercase tracking-widest text-white/40 inline-flex items-center gap-2 truncate">
+                        <Zap size={12} strokeWidth={1.75} /> Stable LP · higher yield
+                      </p>
+                      <span className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">
+                        Uniswap V3 · USDC/USDT
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      Earn trading fees by providing USDC/USDT liquidity. Both sides are stablecoins
+                      and the position is always minted to you. Unlike plain lending, this carries a
+                      little market risk, so it needs your one-time OK.
+                    </p>
+
+                    {!marketRiskOn ? (
+                      <button
+                        onClick={onEnableLp}
+                        disabled={enableLp.isPending || !session.uaAddress}
+                        className="mt-4 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] hover:bg-[color:var(--color-lime)]/10 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {enableLp.isPending ? "Confirm in wallet…" : "I understand — unlock stable LP"}
+                      </button>
+                    ) : (
+                      <>
+                        <div className="mt-4 flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-widest text-white/40">
+                            USDC
+                          </span>
+                          <input
+                            type="number"
+                            min={2}
+                            step={1}
+                            value={lpAmount || ""}
+                            placeholder="Auto"
+                            onChange={(e) => setLpAmount(Number(e.target.value))}
+                            className="w-28 bg-transparent border border-white/20 rounded-full px-4 py-2 text-sm outline-none focus:border-white/40"
+                            aria-label="USDC amount for stable LP"
+                          />
+                          <span className="text-[10px] uppercase tracking-widest text-white/30">
+                            leave blank = suggested
+                          </span>
+                        </div>
+                        <button
+                          onClick={onOpenLp}
+                          disabled={openLp.isPending || !handsOff}
+                          className="mt-4 bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                        >
+                          {openLp.isPending ? "AXIS is opening it…" : "Open stable LP"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}

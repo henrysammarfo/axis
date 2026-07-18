@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,6 +16,7 @@ from services.aave_transactions import (
     FundingError,
     build_activation_transactions,
     build_rebalance_calls,
+    get_token_balance_usdc,
     require_usdc_funding,
     verify_tx_success,
 )
@@ -23,12 +25,17 @@ from services.defi_executor import DeFiExecutor
 from services.portfolio_tracker import PortfolioTracker
 from services.strategy_engine import (
     MIN_BUDGET_USDC,
+    RiskLevel,
+    UNISWAP_LP_ASSET,
+    UNISWAP_LP_PROTOCOL,
     build_plan,
     build_plan_from_custom,
     parse_goal,
     parse_risk_level,
+    recommend_lp_usdc,
     validate_custom_legs,
 )
+from services.uniswap_lp import build_lp_enter_calls
 from services.tenant_guard import assert_same_user, assert_wallet_belongs_to_user
 from services.x402_client import X402Client
 from services.yield_fetcher import YieldFetcher
@@ -90,6 +97,26 @@ class RebalanceConfirmRequest(BaseModel):
     instruction: str
     tx_hash: str
     actions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MarketRiskConsentRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    consent: bool = True
+
+
+class LpPrepareRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    usdc_amount: float | None = Field(default=None, ge=0)
+
+
+class LpConfirmRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    usdc_amount: float = Field(gt=0)
+    tx_hash: str
+    estimated_apy: float = 0.0
 
 
 class CustomStrategyLeg(BaseModel):
@@ -495,6 +522,142 @@ async def save_custom_strategy(
         "plan": plan.to_dict(),
         "custom_strategy": {"legs": clean},
         "message": "Your custom strategy is saved. Deploy or rebalance to apply it.",
+    }
+
+
+MIN_LP_USDC = 2.0  # need at least ~$1 per side after the split
+
+
+@router.post("/consent/market-risk")
+@limiter.limit("10/minute")
+async def set_market_risk_consent(
+    request_body: MarketRiskConsentRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Record the user's one-time consent to market-risk positions (Uniswap V3 LP)."""
+    assert_same_user(auth_user_id, request_body.user_id)
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=True)
+
+    await tracker.save_market_risk_consent(
+        user_id=request_body.user_id,
+        ua_address=request_body.ua_address,
+        consent=request_body.consent,
+    )
+    return {"status": "ok", "market_risk_consent": bool(request_body.consent)}
+
+
+@router.post("/lp/prepare")
+@limiter.limit("20/minute")
+async def prepare_lp(
+    request_body: LpPrepareRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """
+    Build policy-safe Uniswap V3 USDC/USDT stable-LP calls for the session key.
+
+    Gated: hands-off session ON + market-risk consent given + Aggressive tier.
+    """
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    if not (user and user.session_active):
+        raise HTTPException(status_code=409, detail="Turn on hands-off mode first.")
+    if not user.market_risk_consent:
+        raise HTTPException(
+            status_code=403,
+            detail="Market-risk positions need your one-time consent first.",
+        )
+    if parse_risk_level(user.risk_level or "moderate") != RiskLevel.AGGRESSIVE:
+        raise HTTPException(
+            status_code=403,
+            detail="The stable LP is available on the Aggressive risk level only.",
+        )
+
+    idle = get_token_balance_usdc(request_body.ua_address, "USDC")
+    suggested = recommend_lp_usdc(user.risk_level, user.goal or "grow", user.budget_usdc or 0.0)
+    amount = request_body.usdc_amount if request_body.usdc_amount else suggested
+    amount = round(min(float(amount or 0.0), idle), 2)
+
+    if amount < MIN_LP_USDC:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Need at least ${MIN_LP_USDC:.0f} idle USDC to open a stable LP "
+                f"(idle: ${idle:.2f})."
+            ),
+        )
+
+    try:
+        calls = build_lp_enter_calls(
+            owner=request_body.ua_address,
+            usdc_amount=amount,
+            deadline=int(time.time()) + 1200,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "pending_execution",
+        "calls": calls,
+        "usdc_amount": amount,
+        "explanation": (
+            f"Opening a Uniswap V3 USDC/USDT stable LP with ${amount:.2f}. "
+            "Full-range, both legs stablecoins, and the position is minted to you."
+        ),
+    }
+
+
+@router.post("/lp/confirm")
+@limiter.limit("20/minute")
+async def confirm_lp(
+    request_body: LpConfirmRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Verify the session-executed LP mint on-chain and record the position."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    try:
+        receipt = verify_tx_success(request_body.tx_hash)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await tracker.log_action(
+        request_body.user_id,
+        "execute_allocation",
+        {
+            "protocol": UNISWAP_LP_PROTOCOL,
+            "asset": UNISWAP_LP_ASSET,
+            "amount_usdc": round(float(request_body.usdc_amount), 2),
+            "action": "lp",
+        },
+        {
+            "success": True,
+            "tx_hash": request_body.tx_hash,
+            "chain": "arbitrum",
+            "estimated_apy": float(request_body.estimated_apy or 0.0),
+            "executed_via": "AXIS session key · Uniswap V3",
+            **receipt,
+        },
+        message=f"Opened Uniswap USDC/USDT LP with ${request_body.usdc_amount:.2f}",
+    )
+    return {
+        "status": "lp_opened",
+        "explanation": "Your Uniswap USDC/USDT stable LP is open and minted to you.",
     }
 
 

@@ -911,6 +911,80 @@ export async function rebalanceViaSession(body: {
   return { ...confirmed, tx_hash: result.tx_hash };
 }
 
+/**
+ * Enable the market-risk (Uniswap V3 stable LP) path. Rebuilds the session
+ * approval WITH the LP permissions baked in — one Magic signature — and records
+ * the user's one-time consent. The LP recipient is pinned to the user on-chain.
+ */
+export async function enableMarketRiskSession(userId: string, uaAddress: string): Promise<void> {
+  if (!isArbitrumOne()) {
+    throw new Error("The stable LP is available on Arbitrum One only.");
+  }
+  const magic = getMagic();
+  await magic.evm.switchChain(ARBITRUM_ONE_CHAIN_ID);
+  const provider = magic.rpcProvider as {
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+
+  const { address: sessionSignerAddress } = await getSessionSignerAddress();
+  const approval = await buildSessionApproval({
+    magicProvider: provider,
+    ownerAddress: uaAddress,
+    sessionSignerAddress,
+    includeMarketRisk: true,
+  });
+
+  await axisApi.enableSession({
+    user_id: userId,
+    ua_address: uaAddress,
+    approval,
+    session_signer: sessionSignerAddress,
+  });
+  await axisApi.setMarketRiskConsent({
+    user_id: userId,
+    ua_address: uaAddress,
+    consent: true,
+  });
+}
+
+/**
+ * Open a Uniswap V3 USDC/USDT stable LP via the session key (no prompts).
+ * Requires the market-risk session (see enableMarketRiskSession) to be active.
+ */
+export async function openLpViaSession(body: {
+  user_id: string;
+  ua_address: string;
+  usdc_amount?: number;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  const prepared = await axisApi.prepareLp(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not open the LP. Please try again.");
+  }
+
+  const confirmed = await axisApi.confirmLp({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    usdc_amount: prepared.usdc_amount,
+    tx_hash: result.tx_hash,
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
 export async function logout(): Promise<void> {
   if (!isBrowser()) {
     clearSession();

@@ -124,6 +124,19 @@ class PortfolioTracker:
         await self.db.flush()
         return user
 
+    async def save_market_risk_consent(
+        self,
+        user_id: str,
+        ua_address: str,
+        consent: bool,
+    ) -> User:
+        """Record the user's one-time consent to market-risk positions (Uniswap V3 LP)."""
+        await assert_address_not_claimed(self, ua_address, user_id)
+        user = await self.ensure_user(user_id, ua_address=ua_address)
+        user.market_risk_consent = bool(consent)
+        await self.db.flush()
+        return user
+
     async def save_custom_strategy(
         self,
         user_id: str,
@@ -252,4 +265,5 @@ class PortfolioTracker:
             "session_active": bool(user.session_active) if user else False,
             "session_approval": user.session_key_approval if user else None,
             "custom_strategy": user.custom_strategy if user else None,
+            "market_risk_consent": bool(user.market_risk_consent) if user else False,
         }
