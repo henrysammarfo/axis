@@ -5,6 +5,7 @@ import {
   rebalanceViaSession,
   enableMarketRiskSession,
   openLpViaSession,
+  closeLpViaSession,
   getStoredSession,
 } from "../lib/wallet";
 
@@ -139,6 +140,18 @@ export function useOpenLpViaSession() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: openLpViaSession,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
+    },
+  });
+}
+
+/** Close the Uniswap V3 USDC/USDT stable LP via the session key (prompt-free). */
+export function useCloseLpViaSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: closeLpViaSession,
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });

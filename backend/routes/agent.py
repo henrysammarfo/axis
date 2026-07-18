@@ -35,7 +35,7 @@ from services.strategy_engine import (
     recommend_lp_usdc,
     validate_custom_legs,
 )
-from services.uniswap_lp import build_lp_enter_calls
+from services.uniswap_lp import build_lp_enter_calls, build_lp_exit_calls, find_lp_position
 from services.tenant_guard import assert_same_user, assert_wallet_belongs_to_user
 from services.x402_client import X402Client
 from services.yield_fetcher import YieldFetcher
@@ -117,6 +117,17 @@ class LpConfirmRequest(BaseModel):
     usdc_amount: float = Field(gt=0)
     tx_hash: str
     estimated_apy: float = 0.0
+
+
+class LpExitPrepareRequest(BaseModel):
+    user_id: str
+    ua_address: str
+
+
+class LpExitConfirmRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    tx_hash: str
 
 
 class CustomStrategyLeg(BaseModel):
@@ -658,6 +669,108 @@ async def confirm_lp(
     return {
         "status": "lp_opened",
         "explanation": "Your Uniswap USDC/USDT stable LP is open and minted to you.",
+    }
+
+
+@router.post("/lp/exit/prepare")
+@limiter.limit("20/minute")
+async def prepare_lp_exit(
+    request_body: LpExitPrepareRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """
+    Build policy-safe calls to fully close the user's USDC/USDT stable LP.
+
+    Reads the live position on-chain (source of truth), then decreases liquidity,
+    collects everything to the owner, and burns the emptied NFT. Recipient is
+    pinned to the owner by the session CallPolicy — funds only ever return to them.
+    """
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    if not (user and user.session_active):
+        raise HTTPException(status_code=409, detail="Turn on hands-off mode first.")
+    if not user.market_risk_consent:
+        raise HTTPException(
+            status_code=403,
+            detail="Market-risk positions need your one-time consent first.",
+        )
+
+    position = find_lp_position(request_body.ua_address)
+    if not position:
+        return {
+            "status": "no_action",
+            "calls": [],
+            "explanation": "No open USDC/USDT stable LP found for your wallet.",
+        }
+
+    token_id, liquidity = position
+    try:
+        calls = build_lp_exit_calls(
+            owner=request_body.ua_address,
+            token_id=token_id,
+            liquidity=liquidity,
+            deadline=int(time.time()) + 1200,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "pending_execution",
+        "calls": calls,
+        "token_id": token_id,
+        "explanation": (
+            "Closing your Uniswap USDC/USDT stable LP: withdrawing liquidity and "
+            "collecting everything back to your wallet."
+        ),
+    }
+
+
+@router.post("/lp/exit/confirm")
+@limiter.limit("20/minute")
+async def confirm_lp_exit(
+    request_body: LpExitConfirmRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Verify the session-executed LP close on-chain and mark the position closed."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    try:
+        receipt = verify_tx_success(request_body.tx_hash)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    closed = await tracker.close_positions(
+        request_body.user_id, UNISWAP_LP_PROTOCOL, UNISWAP_LP_ASSET
+    )
+    await tracker.log_action(
+        request_body.user_id,
+        "close_position",
+        {"protocol": UNISWAP_LP_PROTOCOL, "asset": UNISWAP_LP_ASSET, "action": "lp_exit"},
+        {
+            "success": True,
+            "tx_hash": request_body.tx_hash,
+            "chain": "arbitrum",
+            "executed_via": "AXIS session key · Uniswap V3",
+            "positions_closed": closed,
+            **receipt,
+        },
+        message="Closed Uniswap USDC/USDT stable LP",
+    )
+    return {
+        "status": "lp_closed",
+        "explanation": "Your stable LP is closed and the funds are back in your wallet.",
     }
 
 

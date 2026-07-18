@@ -20,6 +20,7 @@ from typing import Any
 
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector, to_checksum_address
+from web3 import Web3
 
 from chain_config import ARBITRUM_ONE_CHAIN_ID
 from config import get_settings
@@ -189,6 +190,90 @@ def build_lp_enter_calls(
         }
     )
     return calls
+
+
+# Minimal NonfungiblePositionManager (ERC721Enumerable) read ABI for exit discovery.
+_NPM_READ_ABI = [
+    {
+        "inputs": [{"name": "owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"name": "owner", "type": "address"},
+            {"name": "index", "type": "uint256"},
+        ],
+        "name": "tokenOfOwnerByIndex",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "tokenId", "type": "uint256"}],
+        "name": "positions",
+        "outputs": [
+            {"name": "nonce", "type": "uint96"},
+            {"name": "operator", "type": "address"},
+            {"name": "token0", "type": "address"},
+            {"name": "token1", "type": "address"},
+            {"name": "fee", "type": "uint24"},
+            {"name": "tickLower", "type": "int24"},
+            {"name": "tickUpper", "type": "int24"},
+            {"name": "liquidity", "type": "uint128"},
+            {"name": "feeGrowthInside0LastX128", "type": "uint256"},
+            {"name": "feeGrowthInside1LastX128", "type": "uint256"},
+            {"name": "tokensOwed0", "type": "uint128"},
+            {"name": "tokensOwed1", "type": "uint128"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+# Bound on-chain enumeration so a wallet with many NFTs can't stall the request.
+_MAX_LP_SCAN = 60
+
+
+def find_lp_position(owner: str) -> tuple[int, int] | None:
+    """
+    Find the owner's live USDC/USDT 0.01% LP position on-chain (source of truth).
+
+    Returns (token_id, liquidity) for the largest matching open position, or None.
+    We read directly from the NonfungiblePositionManager instead of trusting stored
+    state, so "close" always acts on the real position even after external changes.
+    """
+    _require_arbitrum_one()
+    owner_cs = to_checksum_address(owner)
+    w3 = Web3(Web3.HTTPProvider(get_settings().arbitrum_rpc))
+    npm = w3.eth.contract(address=to_checksum_address(UNISWAP_V3_NPM), abi=_NPM_READ_ABI)
+
+    try:
+        balance = int(npm.functions.balanceOf(owner_cs).call())
+    except Exception:
+        return None
+    if balance <= 0:
+        return None
+
+    best: tuple[int, int] | None = None
+    for index in range(min(balance, _MAX_LP_SCAN)):
+        try:
+            token_id = int(npm.functions.tokenOfOwnerByIndex(owner_cs, index).call())
+            pos = npm.functions.positions(token_id).call()
+        except Exception:
+            continue
+        token0, token1, fee, liquidity = pos[2], pos[3], int(pos[4]), int(pos[7])
+        if (
+            liquidity > 0
+            and int(fee) == LP_FEE
+            and to_checksum_address(token0) == TOKEN0
+            and to_checksum_address(token1) == TOKEN1
+        ):
+            if best is None or liquidity > best[1]:
+                best = (token_id, liquidity)
+    return best
 
 
 def build_lp_exit_calls(

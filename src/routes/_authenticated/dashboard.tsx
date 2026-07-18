@@ -44,6 +44,7 @@ import {
   useSaveCustomStrategy,
   useEnableMarketRiskSession,
   useOpenLpViaSession,
+  useCloseLpViaSession,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 
@@ -144,6 +145,7 @@ function Dashboard() {
   const saveCustom = useSaveCustomStrategy();
   const enableLp = useEnableMarketRiskSession();
   const openLp = useOpenLpViaSession();
+  const closeLp = useCloseLpViaSession();
   const activatedRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
@@ -366,6 +368,29 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't open the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  const onCloseLp = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await closeLp.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+      });
+      if (res.status === "no_action") {
+        toast.info("No open LP", {
+          description: res.explanation || "You don't have a stable LP open right now.",
+        });
+        return;
+      }
+      toast.success("AXIS closed your LP", {
+        description: (res.explanation || "Your funds are back in your wallet.").slice(0, 140),
+      });
+    } catch (e) {
+      toast.error("Couldn't close the LP", {
         description: e instanceof Error ? e.message : "Please try again.",
       });
     }
@@ -800,13 +825,22 @@ function Dashboard() {
                             leave blank = suggested
                           </span>
                         </div>
-                        <button
-                          onClick={onOpenLp}
-                          disabled={openLp.isPending || !handsOff}
-                          className="mt-4 bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
-                        >
-                          {openLp.isPending ? "AXIS is opening it…" : "Open stable LP"}
-                        </button>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={onOpenLp}
+                            disabled={openLp.isPending || !handsOff}
+                            className="bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                          >
+                            {openLp.isPending ? "AXIS is opening it…" : "Open stable LP"}
+                          </button>
+                          <button
+                            onClick={onCloseLp}
+                            disabled={closeLp.isPending || !handsOff}
+                            className="border border-white/20 hover:bg-white/5 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                          >
+                            {closeLp.isPending ? "AXIS is closing it…" : "Close LP"}
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>

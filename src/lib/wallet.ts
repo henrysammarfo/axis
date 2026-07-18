@@ -985,6 +985,43 @@ export async function openLpViaSession(body: {
   return { ...confirmed, tx_hash: result.tx_hash };
 }
 
+/**
+ * Close the Uniswap V3 USDC/USDT stable LP via the session key (no prompts).
+ * Backend reads the live position on-chain and returns decrease/collect/burn calls;
+ * the agent executes them and funds return to the owner (recipient pinned on-chain).
+ */
+export async function closeLpViaSession(body: {
+  user_id: string;
+  ua_address: string;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  const prepared = await axisApi.prepareLpExit(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not close the LP. Please try again.");
+  }
+
+  const confirmed = await axisApi.confirmLpExit({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    tx_hash: result.tx_hash,
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
 export async function logout(): Promise<void> {
   if (!isBrowser()) {
     clearSession();

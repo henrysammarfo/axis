@@ -259,6 +259,20 @@ export const axisApi = {
       body: JSON.stringify(body),
     }),
 
+  prepareLpExit: (body: { user_id: string; ua_address: string }) =>
+    request<{
+      status: "pending_execution" | "no_action" | string;
+      calls: Array<{ to: string; data: string; value?: string; purpose?: string }>;
+      token_id?: number;
+      explanation: string;
+    }>("/api/agent/lp/exit/prepare", { method: "POST", body: JSON.stringify(body) }),
+
+  confirmLpExit: (body: { user_id: string; ua_address: string; tx_hash: string }) =>
+    request<{ status: string; explanation: string }>("/api/agent/lp/exit/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   saveCustomStrategy: (body: {
     user_id: string;
     ua_address: string;

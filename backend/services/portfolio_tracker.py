@@ -186,6 +186,23 @@ class PortfolioTracker:
             )
         await self.db.flush()
 
+    async def close_positions(self, user_id: str, protocol: str, asset: str) -> int:
+        """Mark matching open positions closed (e.g. after an LP exit). Returns the count."""
+        result = await self.db.execute(
+            select(Position).where(
+                Position.user_id == user_id,
+                Position.protocol == protocol,
+                Position.asset == asset,
+                Position.status == "open",
+            )
+        )
+        rows = result.scalars().all()
+        for p in rows:
+            p.status = "closed"
+            p.closed_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return len(rows)
+
     async def get_positions(self, user_id: str) -> list[dict[str, Any]]:
         result = await self.db.execute(
             select(Position)
