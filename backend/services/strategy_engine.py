@@ -244,3 +244,120 @@ def preview_matrix_cell(
     live_apys: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     return build_plan(risk_level, goal, budget_usdc, live_apys).to_dict()
+
+
+# Power-user custom strategies: bounded to vetted, non-suicidal building blocks.
+CUSTOM_ALLOWED_ASSETS = frozenset({"USDC", "USDT"})
+CUSTOM_ALLOWED_PROTOCOLS = frozenset({"aave"})
+CUSTOM_MAX_LEGS = 4
+
+
+def validate_custom_legs(legs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate a custom strategy against the allowlist. Raises ValueError on any violation."""
+    if not legs:
+        raise ValueError("Add at least one strategy leg.")
+    if len(legs) > CUSTOM_MAX_LEGS:
+        raise ValueError(f"Too many legs (max {CUSTOM_MAX_LEGS}).")
+
+    clean: list[dict[str, Any]] = []
+    seen_assets: set[str] = set()
+    total = 0.0
+    for leg in legs:
+        protocol = str(leg.get("protocol", "aave")).strip().lower()
+        asset = str(leg.get("asset", "")).strip().upper()
+        try:
+            weight = float(leg.get("weight_pct", 0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Each leg needs a numeric weight_pct.") from exc
+
+        if protocol not in CUSTOM_ALLOWED_PROTOCOLS:
+            raise ValueError(f"Protocol '{protocol}' is not allowed. Use: aave.")
+        if asset not in CUSTOM_ALLOWED_ASSETS:
+            raise ValueError(f"Asset '{asset}' is not allowed. Use: USDC, USDT.")
+        if asset in seen_assets:
+            raise ValueError(f"Duplicate asset '{asset}'. Combine weights into one leg.")
+        if weight <= 0 or weight > 100:
+            raise ValueError("Each weight_pct must be between 0 and 100.")
+
+        seen_assets.add(asset)
+        total += weight
+        clean.append({"protocol": protocol, "asset": asset, "weight_pct": round(weight, 4)})
+
+    if abs(total - 100.0) > 0.01:
+        raise ValueError(f"Weights must sum to 100% (got {total:.2f}%).")
+    return clean
+
+
+def build_plan_from_custom(
+    legs: list[dict[str, Any]],
+    budget_usdc: float,
+    live_apys: dict[str, float] | None = None,
+    risk_level: str | RiskLevel = RiskLevel.MODERATE,
+    goal: str | Goal = Goal.MAXIMIZE,
+) -> AllocationPlan:
+    """Build a fully-deployed plan from validated custom legs (no cash buffer)."""
+    clean = validate_custom_legs(legs)
+
+    if budget_usdc < MIN_BUDGET_USDC:
+        raise ValueError(f"Budget must be at least ${MIN_BUDGET_USDC:.0f} USDC.")
+    if budget_usdc > 100_000:
+        raise ValueError("Budget exceeds maximum ($100,000 USDC).")
+
+    risk = risk_level if isinstance(risk_level, RiskLevel) else parse_risk_level(risk_level)
+    goal_e = goal if isinstance(goal, Goal) else parse_goal(goal)
+
+    apys = {k.upper(): float(v) for k, v in (live_apys or {}).items()}
+    deployed = round(budget_usdc, 2)
+
+    raw_legs: list[tuple[str, float, float]] = [
+        (leg["asset"], round(deployed * leg["weight_pct"] / 100.0, 2), leg["weight_pct"] / 100.0)
+        for leg in clean
+    ]
+
+    # Fix rounding so legs sum to deployed.
+    leg_sum = sum(a for _, a, _ in raw_legs)
+    delta = round(deployed - leg_sum, 2)
+    if delta != 0 and raw_legs:
+        asset, amount, weight = raw_legs[0]
+        raw_legs[0] = (asset, round(amount + delta, 2), weight)
+
+    legs_out: list[AllocationLeg] = []
+    for asset, amount, weight in raw_legs:
+        if amount < MIN_LEG_USDC:
+            continue
+        apy = apys.get(asset, 0.0)
+        legs_out.append(
+            AllocationLeg(
+                protocol="aave",
+                asset=asset,
+                action="supply",
+                amount_usdc=amount,
+                weight_of_deployed=round(weight, 4),
+                estimated_apy=round(apy, 4),
+            )
+        )
+
+    if not legs_out:
+        raise ValueError("Custom strategy produced no deployable legs for this budget.")
+
+    blended = sum(leg.amount_usdc * leg.estimated_apy for leg in legs_out) / deployed
+    weekly = round(deployed * blended / 100 / 52, 4) if blended else 0.0
+
+    notes = (
+        "Custom strategy: "
+        + ", ".join(f"{leg.asset} {leg.weight_of_deployed * 100:.0f}%" for leg in legs_out)
+        + f" · deploy ${deployed:.2f} to Aave.",
+    )
+
+    return AllocationPlan(
+        risk_level=risk,
+        goal=goal_e,
+        budget_usdc=deployed,
+        cash_buffer_usdc=0.0,
+        cash_buffer_pct=0.0,
+        deployed_usdc=deployed,
+        legs=tuple(legs_out),
+        blended_apy=round(blended, 4),
+        estimated_weekly_yield_usdc=weekly,
+        notes=notes,
+    )

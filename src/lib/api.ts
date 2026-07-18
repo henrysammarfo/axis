@@ -25,6 +25,9 @@ export type AgentStatus = {
   budget_usdc: number;
   risk_level: string;
   goal: string;
+  session_active?: boolean;
+  session_approval?: string | null;
+  custom_strategy?: import("./strategy").CustomStrategy | null;
   x402_spend?: { total_spent_usdc: number; queries_made: number };
 };
 
@@ -197,6 +200,49 @@ export const axisApi = {
         body: JSON.stringify(body),
       },
     ),
+
+  enableSession: (body: {
+    user_id: string;
+    ua_address: string;
+    approval: string;
+    session_signer: string;
+  }) =>
+    request<{ status: string; session_active: boolean; message?: string }>(
+      "/api/agent/session/enable",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  prepareRebalance: (body: { user_id: string; ua_address: string; instruction: string }) =>
+    request<{
+      status: "pending_execution" | "no_action" | string;
+      explanation: string;
+      calls: Array<{ to: string; data: string; value?: string; purpose?: string }>;
+      actions: Array<Record<string, unknown>>;
+    }>("/api/agent/rebalance/prepare", { method: "POST", body: JSON.stringify(body) }),
+
+  confirmRebalance: (body: {
+    user_id: string;
+    ua_address: string;
+    instruction: string;
+    tx_hash: string;
+    actions: Array<Record<string, unknown>>;
+  }) =>
+    request<{ status: string; explanation: string }>("/api/agent/rebalance/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  saveCustomStrategy: (body: {
+    user_id: string;
+    ua_address: string;
+    legs: import("./strategy").CustomStrategyLeg[];
+  }) =>
+    request<{
+      status: string;
+      plan: import("./strategy").StrategyPlan;
+      custom_strategy: import("./strategy").CustomStrategy;
+      message?: string;
+    }>("/api/agent/strategy/custom", { method: "POST", body: JSON.stringify(body) }),
 
   status: (userId: string) => request<AgentStatus>(`/api/agent/status/${userId}`),
 

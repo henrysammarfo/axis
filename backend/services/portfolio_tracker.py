@@ -108,6 +108,35 @@ class PortfolioTracker:
         await self.db.flush()
         return user
 
+    async def save_session_approval(
+        self,
+        user_id: str,
+        ua_address: str,
+        approval: str,
+        session_signer: str,
+    ) -> User:
+        """Persist the user's policy-bounded session-key approval (enables hands-off mode)."""
+        await assert_address_not_claimed(self, ua_address, user_id)
+        user = await self.ensure_user(user_id, ua_address=ua_address)
+        user.session_key_approval = approval
+        user.session_key_signer = normalize_address(session_signer)
+        user.session_active = True
+        await self.db.flush()
+        return user
+
+    async def save_custom_strategy(
+        self,
+        user_id: str,
+        ua_address: str,
+        custom_strategy: dict[str, Any] | None,
+    ) -> User:
+        """Persist (or clear) a power-user custom strategy."""
+        await assert_address_not_claimed(self, ua_address, user_id)
+        user = await self.ensure_user(user_id, ua_address=ua_address)
+        user.custom_strategy = custom_strategy
+        await self.db.flush()
+        return user
+
     async def log_action(
         self,
         user_id: str,
@@ -220,4 +249,7 @@ class PortfolioTracker:
             "budget_usdc": user.budget_usdc if user else 0,
             "risk_level": user.risk_level if user else "moderate",
             "goal": user.goal if user else "",
+            "session_active": bool(user.session_active) if user else False,
+            "session_approval": user.session_key_approval if user else None,
+            "custom_strategy": user.custom_strategy if user else None,
         }

@@ -1,15 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { FixedLogo, FixedNav, FixedFooter } from "../components/brand/FixedChrome";
-import { Logo } from "../components/brand/Logo";
 import { Mail, Check, Package, Timer } from "lucide-react";
 import { brandHeadMeta } from "../lib/seo";
 
 const MERCH = [
-  { id: "m1", name: "AXIS Wordmark Hoodie", drop: "Q1", status: "Coming Soon" },
-  { id: "m2", name: "Set. Forget. Earn. Tee", drop: "Q1", status: "Waitlist" },
-  { id: "m3", name: "Circled R Cap", drop: "Q2", status: "Coming Soon" },
-  { id: "m4", name: "Archive Zip", drop: "Q2", status: "Preview" },
+  {
+    id: "m1",
+    name: '"PROMPT" Wordmark Hoodie',
+    drop: "Q1",
+    status: "Coming Soon",
+    image: "/merch/prompt-hoodie.png",
+  },
+  {
+    id: "m2",
+    name: '"PROMPT" Essential Tee',
+    drop: "Q1",
+    status: "Waitlist",
+    image: "/merch/prompt-tee.png",
+  },
+  {
+    id: "m3",
+    name: '"PROMPT" Distressed Cap',
+    drop: "Q2",
+    status: "Coming Soon",
+    image: "/merch/prompt-cap.png",
+  },
+  {
+    id: "m4",
+    name: '"PROMPT" Archive Zip',
+    drop: "Q2",
+    status: "Preview",
+    image: "/merch/prompt-zip.png",
+  },
 ] as const;
 
 export const Route = createFileRoute("/merch")({
@@ -84,31 +107,35 @@ function MerchPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/10 border border-white/10">
-          {MERCH.map((item, i) => {
-            const dark = i % 2 === 0;
-            return (
-              <div
-                key={item.id}
-                className={`${dark ? "bg-black text-white" : "bg-white text-black"} p-6 sm:p-8 min-h-[320px] sm:min-h-[380px] flex flex-col justify-between relative`}
-              >
-                <div className="flex items-start justify-between">
-                  <span className="text-[10px] uppercase tracking-widest opacity-60">
+          {MERCH.map((item, i) => (
+            <div
+              key={item.id}
+              className="group bg-black text-white flex flex-col relative overflow-hidden"
+            >
+              <div className="relative aspect-[3/4] overflow-hidden bg-[#f4f4f4]">
+                <img
+                  src={item.image}
+                  alt={`${item.name} — PROMPT by AXIS`}
+                  loading="lazy"
+                  className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.03]"
+                />
+                <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-4 text-black">
+                  <span className="text-[10px] uppercase tracking-widest bg-white/70 backdrop-blur px-2 py-1 rounded-full">
                     {String(i + 1).padStart(2, "0")} / {item.drop}
                   </span>
-                  <span className="text-[10px] uppercase tracking-widest opacity-60">${item.price}</span>
-                </div>
-                <div className="flex-1 flex items-center justify-center py-8">
-                  <Logo className="w-[55%] max-w-[220px]" />
-                </div>
-                <div>
-                  <div className="text-lg sm:text-xl uppercase tracking-[-0.03em] leading-tight">{item.name}</div>
-                  <div className={`mt-3 inline-flex items-center gap-2 text-[10px] uppercase tracking-widest border ${dark ? "border-white/30" : "border-black/30"} px-3 py-1 rounded-full opacity-80`}>
+                  <span className="text-[10px] uppercase tracking-widest bg-[color:var(--color-lime)] text-black px-2 py-1 rounded-full">
                     {item.status}
-                  </div>
+                  </span>
                 </div>
               </div>
-            );
-          })}
+              <div className="p-5 sm:p-6 flex items-center justify-between gap-3">
+                <div className="text-base sm:text-lg uppercase tracking-[-0.03em] leading-tight">
+                  {item.name}
+                </div>
+                <Timer size={16} strokeWidth={1.75} className="shrink-0 text-white/40" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

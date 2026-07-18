@@ -25,6 +25,12 @@ class User(Base):
     goal: Mapped[str] = mapped_column(String(255), default="maximize yield")
     budget_usdc: Mapped[float] = mapped_column(Float, default=0.0)
     active: Mapped[bool] = mapped_column(default=False)
+    # Autonomous agent: policy-bounded ZeroDev session key approval (serialized).
+    session_key_approval: Mapped[str | None] = mapped_column(Text, nullable=True)
+    session_key_signer: Mapped[str | None] = mapped_column(String(42), nullable=True)
+    session_active: Mapped[bool] = mapped_column(default=False)
+    # Power-user custom strategy (allowlisted legs + weights), JSON-encoded.
+    custom_strategy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

@@ -198,8 +198,8 @@ function Onboard() {
               <div>
                 <h1 className="text-4xl tracking-[-0.04em]">Build your agent</h1>
                 <p className="mt-3 text-white/60 text-sm">
-                  Pick a vibe and a goal. AXIS handles the rest. No deposit needed yet — you can add
-                  money and start whenever you like.
+                  Pick a vibe and a goal. AXIS handles the rest. No deposit needed yet — add money
+                  whenever you like, okay AXIS once, and it invests hands-off from there.
                 </p>
                 {session?.email && (
                   <p className="mt-2 text-xs text-white/40">Signed in as {session.email}</p>
@@ -291,7 +291,7 @@ function Onboard() {
                 Create my agent
               </button>
               <p className="text-[10px] text-white/30 text-center uppercase tracking-widest">
-                Free to set up — no deposit, no signing yet
+                Free to set up · one tap at first deposit, then hands-off
               </p>
             </>
           )}

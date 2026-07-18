@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axisApi } from "../lib/api";
-import { deployStrategyWithSignatures, getStoredSession } from "../lib/wallet";
+import { deployStrategy, rebalanceViaSession, getStoredSession } from "../lib/wallet";
 
 export function useAxisConfig() {
   return useQuery({
@@ -73,7 +73,7 @@ export function useActivateAxis() {
 export function useDeployStrategy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: deployStrategyWithSignatures,
+    mutationFn: deployStrategy,
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "report", vars.user_id] });
@@ -90,6 +90,28 @@ export function useRebalanceAxis() {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "report", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
+    },
+  });
+}
+
+/** Autonomous, prompt-free rebalance via the session key. */
+export function useRebalanceViaSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: rebalanceViaSession,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
+    },
+  });
+}
+
+export function useSaveCustomStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: axisApi.saveCustomStrategy,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
     },
   });
 }

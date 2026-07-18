@@ -239,6 +239,96 @@ def build_activation_transactions(
     return txs
 
 
+MAX_UINT256 = (1 << 256) - 1
+
+
+def _usdc_supply_calls(owner_cs: str, amount_raw: int, cid: int) -> list[dict[str, Any]]:
+    pool = aave_pool(cid)
+    usdc = underlying_token("USDC", cid)
+    return [
+        {
+            "purpose": "approve_usdc_aave",
+            "to": usdc,
+            "data": _encode_call(
+                "approve(address,uint256)", ["address", "uint256"], [pool, amount_raw]
+            ),
+            "value": "0x0",
+            "chain_id": cid,
+        },
+        {
+            "purpose": "supply_aave_usdc",
+            "to": pool,
+            "data": _encode_call(
+                "supply(address,uint256,address,uint16)",
+                ["address", "uint256", "address", "uint16"],
+                [usdc, amount_raw, owner_cs, 0],
+            ),
+            "value": "0x0",
+            "chain_id": cid,
+        },
+    ]
+
+
+def _usdc_withdraw_all_call(owner_cs: str, cid: int) -> dict[str, Any]:
+    pool = aave_pool(cid)
+    usdc = underlying_token("USDC", cid)
+    # Aave v3: amount = type(uint256).max withdraws the full aToken balance.
+    return {
+        "purpose": "withdraw_aave_usdc",
+        "to": pool,
+        "data": _encode_call(
+            "withdraw(address,uint256,address)",
+            ["address", "uint256", "address"],
+            [usdc, MAX_UINT256, owner_cs],
+        ),
+        "value": "0x0",
+        "chain_id": cid,
+    }
+
+
+_SAFETY_WORDS = ("safe", "safer", "withdraw", "cash", "exit", "out", "protect", "pull")
+_INVEST_WORDS = ("invest", "deploy", "work", "earn", "yield", "grow", "supply")
+
+
+def build_rebalance_calls(
+    *,
+    owner: str,
+    instruction: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    """
+    Build policy-safe (USDC-only) rebalance calls for the session key.
+
+    Returns (calls, actions, explanation). Empty calls means no on-chain action.
+    """
+    owner_cs = to_checksum_address(owner)
+    cid = _chain_id()
+    text = (instruction or "").strip().lower()
+
+    wants_safety = any(w in text for w in _SAFETY_WORDS)
+    wants_invest = any(w in text for w in _INVEST_WORDS)
+
+    if wants_safety and not wants_invest:
+        call = _usdc_withdraw_all_call(owner_cs, cid)
+        return (
+            [call],
+            [{"action": "withdraw", "asset": "USDC", "protocol": "aave"}],
+            "Moving your USDC out of Aave back to your wallet.",
+        )
+
+    # Default / invest: put idle USDC to work.
+    idle = get_token_balance_usdc(owner_cs, "USDC")
+    amount_raw = usdc_to_raw(idle)
+    if amount_raw <= 0:
+        return ([], [], "No idle USDC to put to work right now.")
+
+    calls = _usdc_supply_calls(owner_cs, amount_raw, cid)
+    return (
+        calls,
+        [{"action": "supply", "asset": "USDC", "protocol": "aave", "amount_usdc": round(idle, 2)}],
+        f"Putting your idle ${idle:.2f} USDC to work in Aave.",
+    )
+
+
 def verify_tx_success(tx_hash: str) -> dict[str, Any]:
     w3 = _w3()
     if not tx_hash or not str(tx_hash).startswith("0x"):

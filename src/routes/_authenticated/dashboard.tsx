@@ -40,12 +40,20 @@ import {
   useAxisStatus,
   useDeployStrategy,
   useRebalanceAxis,
+  useRebalanceViaSession,
+  useSaveCustomStrategy,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 
 import { truncateAddress } from "../../lib/api";
 import { brandHeadMeta } from "../../lib/seo";
-import { GOALS, RISKS, type GoalLabel, type RiskLevel } from "../../lib/strategy";
+import {
+  GOALS,
+  RISKS,
+  type CustomStrategyLeg,
+  type GoalLabel,
+  type RiskLevel,
+} from "../../lib/strategy";
 
 const RISK_LABEL: Record<RiskLevel, string> = {
   conservative: "Safe",
@@ -130,6 +138,8 @@ function Dashboard() {
   const activateMutation = useActivateAxis();
   const deployMutation = useDeployStrategy();
   const rebalanceMutation = useRebalanceAxis();
+  const sessionRebalance = useRebalanceViaSession();
+  const saveCustom = useSaveCustomStrategy();
   const activatedRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
@@ -138,6 +148,9 @@ function Dashboard() {
   const [activating, setActivating] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [savingStrategy, setSavingStrategy] = useState(false);
+
+  const handsOff = Boolean(axisStatus?.session_active);
+  const [usdcWeight, setUsdcWeight] = useState(60);
 
   const activeRisk = (axisStatus?.risk_level || risk || "moderate") as RiskLevel;
   const activeGoal = (axisStatus?.goal || goal || GOALS[0]) as GoalLabel;
@@ -271,12 +284,24 @@ function Dashboard() {
   const onRebalance = async () => {
     if (!rebalanceText.trim() || !userId || !session.uaAddress) return;
     try {
-      const res = await rebalanceMutation.mutateAsync({
-        user_id: userId,
-        ua_address: session.uaAddress,
-        instruction: rebalanceText,
-      });
-      toast.success("AXIS heard you", { description: res.explanation.slice(0, 120) });
+      // Hands-off mode: AXIS executes the move itself (no wallet popups).
+      if (handsOff) {
+        const res = await sessionRebalance.mutateAsync({
+          user_id: userId,
+          ua_address: session.uaAddress,
+          instruction: rebalanceText,
+        });
+        toast.success("AXIS is on it", {
+          description: (res.explanation || "Working on your request.").slice(0, 140),
+        });
+      } else {
+        const res = await rebalanceMutation.mutateAsync({
+          user_id: userId,
+          ua_address: session.uaAddress,
+          instruction: rebalanceText,
+        });
+        toast.success("AXIS heard you", { description: res.explanation.slice(0, 120) });
+      }
       setRebalanceText("");
     } catch (e) {
       toast.error("Couldn't do that", {
@@ -284,6 +309,30 @@ function Dashboard() {
       });
     }
   };
+
+  const onSaveCustom = async () => {
+    if (!userId || !session.uaAddress) return;
+    const usdt = 100 - usdcWeight;
+    const legs: CustomStrategyLeg[] = [];
+    if (usdcWeight > 0) legs.push({ protocol: "aave", asset: "USDC", weight_pct: usdcWeight });
+    if (usdt > 0) legs.push({ protocol: "aave", asset: "USDT", weight_pct: usdt });
+    try {
+      const res = await saveCustom.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        legs,
+      });
+      toast.success("Custom strategy saved", {
+        description: (res.message || "Deploy or ask AXIS to apply it.").slice(0, 140),
+      });
+    } catch (e) {
+      toast.error("Couldn't save that mix", {
+        description: e instanceof Error ? e.message : "Weights must add up to 100%.",
+      });
+    }
+  };
+
+  const rebalancing = handsOff ? sessionRebalance.isPending : rebalanceMutation.isPending;
 
   const livePositions = positions;
 
@@ -427,8 +476,10 @@ function Dashboard() {
                       <span className="text-white/50">
                         ({axisStatus?.risk_level || "moderate"} · {axisStatus?.goal || "—"})
                       </span>
-                      . Add some USDC to your address below, then hit Begin — AXIS takes it from
-                      there.
+                      . Add some USDC to your address below, then tap Begin.{" "}
+                      {handsOff
+                        ? "Hands-off mode is on — AXIS invests with zero popups."
+                        : "You'll okay AXIS once, then it invests and rebalances for you — no more wallet popups."}
                     </p>
                     <button
                       onClick={onDeploy}
@@ -555,10 +606,10 @@ function Dashboard() {
                   />
                   <button
                     onClick={onRebalance}
-                    disabled={rebalanceMutation.isPending || !userId}
+                    disabled={rebalancing || !userId}
                     className="shrink-0 bg-white text-black rounded-full px-5 py-3 text-xs uppercase tracking-widest disabled:opacity-50"
                   >
-                    {rebalanceMutation.isPending ? "…" : "Ask"}
+                    {rebalancing ? "…" : "Ask"}
                   </button>
                 </div>
               </div>
@@ -568,6 +619,11 @@ function Dashboard() {
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 mb-2">
                   <span className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 inline-flex items-center gap-2 truncate">
                     <Shield size={13} strokeWidth={1.75} /> Your strategy
+                    {handsOff && (
+                      <span className="inline-flex items-center gap-1 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] rounded-full px-2 py-0.5 text-[9px]">
+                        <Zap size={10} strokeWidth={2} /> Hands-off on
+                      </span>
+                    )}
                   </span>
                   <span className="text-xl sm:text-2xl tracking-[-0.04em] shrink-0">
                     ${axisStatus?.budget_usdc ?? budget}
@@ -622,6 +678,43 @@ function Dashboard() {
                     Updating your agent…
                   </p>
                 )}
+
+                {/* Build your own mix (power users) */}
+                <div className="mt-6 pt-6 border-t border-white/10">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1">
+                    <p className="text-[10px] uppercase tracking-widest text-white/40 inline-flex items-center gap-2 truncate">
+                      <Sparkles size={12} strokeWidth={1.75} /> Build your own mix
+                    </p>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">
+                      Aave · stablecoins
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/50 leading-relaxed">
+                    Split your deposit between USDC and USDT on Aave. AXIS stays inside the same
+                    safety limits — it can only supply and withdraw to your own wallet.
+                  </p>
+                  <div className="mt-4 flex items-center justify-between text-[10px] uppercase tracking-widest text-white/60">
+                    <span>USDC {usdcWeight}%</span>
+                    <span>USDT {100 - usdcWeight}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={usdcWeight}
+                    onChange={(e) => setUsdcWeight(Number(e.target.value))}
+                    className="mt-2 w-full accent-[color:var(--color-lime)]"
+                    aria-label="USDC / USDT split"
+                  />
+                  <button
+                    onClick={onSaveCustom}
+                    disabled={saveCustom.isPending || !session.uaAddress}
+                    className="mt-4 border border-white/20 hover:bg-white/5 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                  >
+                    {saveCustom.isPending ? "Saving…" : "Save my mix"}
+                  </button>
+                </div>
               </div>
             </>
           )}

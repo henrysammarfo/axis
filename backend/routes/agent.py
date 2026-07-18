@@ -14,6 +14,7 @@ from rate_limit import limiter
 from services.aave_transactions import (
     FundingError,
     build_activation_transactions,
+    build_rebalance_calls,
     require_usdc_funding,
     verify_tx_success,
 )
@@ -23,8 +24,10 @@ from services.portfolio_tracker import PortfolioTracker
 from services.strategy_engine import (
     MIN_BUDGET_USDC,
     build_plan,
+    build_plan_from_custom,
     parse_goal,
     parse_risk_level,
+    validate_custom_legs,
 )
 from services.tenant_guard import assert_same_user, assert_wallet_belongs_to_user
 from services.x402_client import X402Client
@@ -66,6 +69,39 @@ class PreviewRequest(BaseModel):
     budget_usdc: float = Field(ge=MIN_BUDGET_USDC, le=100_000)
     risk_level: str = "moderate"
     goal: str = "Maximize yield"
+
+
+class EnableSessionRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    approval: str = Field(..., min_length=1)
+    session_signer: str
+
+
+class RebalancePrepareRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    instruction: str
+
+
+class RebalanceConfirmRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    instruction: str
+    tx_hash: str
+    actions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CustomStrategyLeg(BaseModel):
+    protocol: str = "aave"
+    asset: str
+    weight_pct: float
+
+
+class CustomStrategyRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    legs: list[CustomStrategyLeg]
 
 
 async def _live_aave_apys() -> dict[str, float]:
@@ -185,7 +221,12 @@ async def prepare_deploy(
         raise HTTPException(status_code=402, detail=str(exc)) from exc
 
     apys = await _live_aave_apys()
-    plan = build_plan(risk, goal, request_body.budget_usdc, apys)
+    custom_legs = (user.custom_strategy or {}).get("legs") if user else None
+    if custom_legs:
+        # Power-user custom mix — still bounded by the same on-chain session policy.
+        plan = build_plan_from_custom(custom_legs, request_body.budget_usdc, apys, risk, goal)
+    else:
+        plan = build_plan(risk, goal, request_body.budget_usdc, apys)
 
     try:
         transactions = build_activation_transactions(
@@ -296,6 +337,164 @@ async def confirm_activate(
         "actions_taken": len(supply_legs),
         "verified_txs": verified,
         "message": "AXIS is managing your Aave positions. Check the dashboard for live status.",
+    }
+
+
+@router.post("/session/enable")
+@limiter.limit("10/minute")
+async def enable_session(
+    request_body: EnableSessionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Store the user's policy-bounded session-key approval (turns on hands-off mode)."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=True)
+
+    await tracker.save_session_approval(
+        user_id=request_body.user_id,
+        ua_address=request_body.ua_address,
+        approval=request_body.approval,
+        session_signer=request_body.session_signer,
+    )
+    return {
+        "status": "session_enabled",
+        "session_active": True,
+        "message": "AXIS can now invest for you hands-free, within your locked limits.",
+    }
+
+
+@router.get("/session/approval/{user_id}")
+@limiter.limit("60/minute")
+async def get_session_approval(
+    user_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Return the caller's own serialized session approval (used by the server executor)."""
+    assert_same_user(auth_user_id, user_id)
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(user_id)
+    if not (user and user.session_active and user.session_key_approval):
+        raise HTTPException(status_code=404, detail="No active hands-off session.")
+    return {
+        "approval": user.session_key_approval,
+        "session_signer": user.session_key_signer,
+    }
+
+
+@router.post("/rebalance/prepare")
+@limiter.limit("20/minute")
+async def prepare_rebalance(
+    request_body: RebalancePrepareRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Build policy-safe (USDC-only) rebalance calls the session key can execute."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    if not (user and user.session_active):
+        raise HTTPException(status_code=409, detail="Hands-off mode is not enabled yet.")
+
+    try:
+        calls, actions, explanation = build_rebalance_calls(
+            owner=request_body.ua_address,
+            instruction=request_body.instruction,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "pending_execution" if calls else "no_action",
+        "explanation": explanation,
+        "calls": calls,
+        "actions": actions,
+    }
+
+
+@router.post("/rebalance/confirm")
+@limiter.limit("20/minute")
+async def confirm_rebalance(
+    request_body: RebalanceConfirmRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Verify the session-executed rebalance on-chain and log it."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
+
+    try:
+        receipt = verify_tx_success(request_body.tx_hash)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    for action in request_body.actions:
+        await tracker.log_action(
+            request_body.user_id,
+            "rebalance",
+            {"instruction": request_body.instruction[:200], **action},
+            {"success": True, "tx_hash": request_body.tx_hash, **receipt, "executed_via": "AXIS session key"},
+            message=f"AXIS rebalanced: {action.get('action', 'update')} {action.get('asset', '')}".strip(),
+        )
+
+    return {
+        "status": "rebalanced",
+        "explanation": "AXIS updated your positions hands-free.",
+    }
+
+
+@router.post("/strategy/custom")
+@limiter.limit("10/minute")
+async def save_custom_strategy(
+    request_body: CustomStrategyRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Validate + persist a power-user custom strategy (bounded to the allowlist)."""
+    assert_same_user(auth_user_id, request_body.user_id)
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=True)
+
+    legs = [leg.model_dump() for leg in request_body.legs]
+    try:
+        clean = validate_custom_legs(legs)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    budget = (user.budget_usdc if user and user.budget_usdc else MIN_BUDGET_USDC)
+    apys = await _live_aave_apys()
+    try:
+        plan = build_plan_from_custom(clean, budget, apys)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await tracker.save_custom_strategy(
+        user_id=request_body.user_id,
+        ua_address=request_body.ua_address,
+        custom_strategy={"legs": clean},
+    )
+    return {
+        "status": "saved",
+        "plan": plan.to_dict(),
+        "custom_strategy": {"legs": clean},
+        "message": "Your custom strategy is saved. Deploy or rebalance to apply it.",
     }
 
 

@@ -53,5 +53,17 @@ async def init_db() -> None:
                 sync_conn.execute(
                     text("ALTER TABLE users ADD COLUMN eip7702_delegated BOOLEAN DEFAULT 0")
                 )
+            if "session_key_approval" not in existing:
+                sync_conn.execute(text("ALTER TABLE users ADD COLUMN session_key_approval TEXT"))
+            if "session_key_signer" not in existing:
+                sync_conn.execute(
+                    text("ALTER TABLE users ADD COLUMN session_key_signer VARCHAR(42)")
+                )
+            if "session_active" not in existing:
+                sync_conn.execute(
+                    text("ALTER TABLE users ADD COLUMN session_active BOOLEAN DEFAULT 0")
+                )
+            if "custom_strategy" not in existing:
+                sync_conn.execute(text("ALTER TABLE users ADD COLUMN custom_strategy JSON"))
 
         await conn.run_sync(_migrate_user_columns)

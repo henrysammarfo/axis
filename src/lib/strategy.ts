@@ -39,3 +39,17 @@ export type ActivationTransaction = {
   value: string;
   chain_id: number;
 };
+
+/** A power-user custom strategy: allowlisted assets with weights that sum to 100. */
+export const CUSTOM_ASSETS = ["USDC", "USDT"] as const;
+export type CustomAsset = (typeof CUSTOM_ASSETS)[number];
+
+export type CustomStrategyLeg = {
+  protocol: "aave";
+  asset: CustomAsset;
+  weight_pct: number;
+};
+
+export type CustomStrategy = {
+  legs: CustomStrategyLeg[];
+};

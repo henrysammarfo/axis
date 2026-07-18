@@ -26,6 +26,8 @@ import {
   isArbitrumOne,
 } from "./chain";
 import { isFrontendFullyConfigured, missingFrontendEnv } from "./env";
+import { buildSessionApproval } from "./kernel-session";
+import { getSessionSignerAddress, executeSessionCalls } from "./agent-executor";
 
 export type WalletSession = {
   userId: string;
@@ -383,14 +385,12 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
     throw new Error("Wallet address unavailable. Complete Magic wallet setup.");
   }
 
-  const needsUa = !auth.ua_address;
   const needsSra = !auth.sra_address;
   const needs7702Evidence = isArbitrumOne() && !auth.eip7702_delegated && !auth.eip7702_tx_hash;
 
-  if (needsUa || needsSra || needs7702Evidence) {
-    const provisioned = needsUa
-      ? await provisionUniversalAccount(magic, ethAddress, didToken)
-      : await ensureEip7702Delegation(magic, ethAddress, auth.ua_address!, didToken);
+  if (!auth.ua_address || needsSra || needs7702Evidence) {
+    // EIP-7702: the account IS the Magic EOA, delegated to ZeroDev Kernel.
+    const provisioned = await ensureKernelDelegation(magic, ethAddress, didToken);
 
     const uaAddress = provisioned.address;
     const sraAddress =
@@ -440,119 +440,86 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
   return session;
 }
 
-async function provisionUniversalAccount(
+/** Read the 7702 delegation target of an EOA (the address it points its code at), if any. */
+async function read7702Delegate(address: string): Promise<string | null> {
+  const rpcUrl = requireEnv("VITE_ARBITRUM_RPC_URL");
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getCode",
+      params: [address, "latest"],
+    }),
+  });
+  const json = (await res.json()) as { result?: string };
+  const code = json.result ?? "0x";
+  // EIP-7702 delegation designator: 0xef0100 || 20-byte address
+  if (code.length >= 48 && code.slice(0, 8).toLowerCase() === "0xef0100") {
+    return `0x${code.slice(8, 48)}`.toLowerCase();
+  }
+  return null;
+}
+
+async function eoaNonce(address: string): Promise<number> {
+  const rpcUrl = requireEnv("VITE_ARBITRUM_RPC_URL");
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getTransactionCount",
+      params: [address, "pending"],
+    }),
+  });
+  const json = (await res.json()) as { result?: string };
+  return json.result ? Number.parseInt(json.result, 16) : 0;
+}
+
+/**
+ * Delegate the Magic EOA to ZeroDev Kernel via a sponsored EIP-7702 Type-4 tx.
+ * The account address stays the EOA; AXIS pays gas. Session keys (see kernel-session.ts)
+ * plug into this Kernel delegate for prompt-free autonomous execution.
+ */
+async function ensureKernelDelegation(
   magic: AxisMagic,
   ownerAddress: string,
   didToken: string,
 ): Promise<ProvisionResult> {
   const chainId = arbitrumChainId();
 
-  // Particle UA v2 EIP-7702 is mainnet-only. Sepolia remains an incomplete demo scaffold.
   if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
     return { address: ownerAddress, eip7702Delegated: false };
   }
-
   if (chainId !== ARBITRUM_ONE_CHAIN_ID) {
     throw new Error(
       `Unsupported chain ${chainId}. Set VITE_ARBITRUM_CHAIN_ID=42161 (Arbitrum One).`,
     );
   }
 
-  requireEnv("VITE_PARTICLE_PROJECT_ID");
-  requireEnv("VITE_PARTICLE_CLIENT_KEY");
-  requireEnv("VITE_PARTICLE_APP_ID");
-
-  const { UniversalAccount, UNIVERSAL_ACCOUNT_VERSION } = await import(
-    "@particle-network/universal-account-sdk"
-  );
-
-  const ua = new UniversalAccount({
-    projectId: requireEnv("VITE_PARTICLE_PROJECT_ID"),
-    projectClientKey: requireEnv("VITE_PARTICLE_CLIENT_KEY"),
-    projectAppUuid: requireEnv("VITE_PARTICLE_APP_ID"),
-    smartAccountOptions: {
-      name: "UNIVERSAL",
-      version: UNIVERSAL_ACCOUNT_VERSION,
-      ownerAddress,
-      useEIP7702: true,
-    },
-  });
-
-  const options = await ua.getSmartAccountOptions();
-  // EIP-7702 mode: UA address is the EOA itself (no separate contract address).
-  const address = options.smartAccountAddress ?? ownerAddress;
-  if (address.toLowerCase() !== ownerAddress.toLowerCase()) {
-    throw new Error(
-      "Particle UA address does not match Magic EOA. EIP-7702 mode may be disabled for this Particle project.",
-    );
-  }
-
-  const delegated = await ensureEip7702Delegation(magic, ownerAddress, address, didToken, ua);
-  return delegated;
-}
-
-async function ensureEip7702Delegation(
-  magic: AxisMagic,
-  ownerAddress: string,
-  uaAddress: string,
-  didToken: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  existingUa?: any,
-): Promise<ProvisionResult> {
-  if (!isArbitrumOne()) {
-    return { address: uaAddress, eip7702Delegated: false };
-  }
-
-  const chainId = ARBITRUM_ONE_CHAIN_ID;
-
   try {
-    const { UniversalAccount, UNIVERSAL_ACCOUNT_VERSION } = await import(
-      "@particle-network/universal-account-sdk"
-    );
+    const { constants } = await import("@zerodev/sdk");
+    const kernelAddress = constants.KERNEL_7702_DELEGATION_ADDRESS as string;
 
-    const ua =
-      existingUa ??
-      new UniversalAccount({
-        projectId: requireEnv("VITE_PARTICLE_PROJECT_ID"),
-        projectClientKey: requireEnv("VITE_PARTICLE_CLIENT_KEY"),
-        projectAppUuid: requireEnv("VITE_PARTICLE_APP_ID"),
-        smartAccountOptions: {
-          name: "UNIVERSAL",
-          version: UNIVERSAL_ACCOUNT_VERSION,
-          ownerAddress,
-          useEIP7702: true,
-        },
-      });
-
-    const deployments = await ua.getEIP7702Deployments();
-    const arb = (deployments as Array<{ chainId: number; isDelegated?: boolean }>).find(
-      (d) => d.chainId === chainId,
-    );
-
-    if (arb?.isDelegated) {
-      return { address: uaAddress, eip7702Delegated: true };
+    const current = await read7702Delegate(ownerAddress);
+    if (current && current === kernelAddress.toLowerCase()) {
+      return { address: ownerAddress, eip7702Delegated: true };
     }
 
     await magic.evm.switchChain(chainId);
+    const nonce = await eoaNonce(ownerAddress);
 
-    const authList = await ua.getEIP7702Auth([chainId]);
-    const auth = Array.isArray(authList) ? authList[0] : authList;
-    if (!auth?.address) {
-      throw new Error("Particle getEIP7702Auth did not return a contract address for Arbitrum One.");
-    }
-
-    // Sponsored Type-4: authority != tx sender, so use Particle nonce as-is (not +1).
-    const authNonce = typeof auth.nonce === "number" ? auth.nonce : 0;
     const rawAuthorization = await magic.wallet.sign7702Authorization({
-      contractAddress: auth.address,
+      contractAddress: kernelAddress,
       chainId,
-      nonce: authNonce,
+      nonce,
     });
-
     const authorization = normalize7702Authorization(rawAuthorization, {
       chainId,
-      contractAddress: auth.address,
-      nonce: authNonce,
+      contractAddress: kernelAddress,
+      nonce,
     });
 
     let transactionHash: string | undefined;
@@ -562,12 +529,12 @@ async function ensureEip7702Delegation(
     } catch (sponsorError) {
       const sponsorMsg =
         sponsorError instanceof Error ? sponsorError.message : String(sponsorError);
-      // Optional safety net: if sponsor is down and Magic EOA already has ETH, self-broadcast.
+      // Safety net: if sponsor is down and the Magic EOA holds ETH, self-broadcast.
       try {
         const selfAuth = await magic.wallet.sign7702Authorization({
-          contractAddress: auth.address,
+          contractAddress: kernelAddress,
           chainId,
-          nonce: authNonce + 1,
+          nonce: nonce + 1,
         });
         const { transactionHash: selfHash } = await magic.wallet.send7702Transaction({
           to: ownerAddress,
@@ -588,18 +555,14 @@ async function ensureEip7702Delegation(
       throw new Error("EIP-7702 Type-4 transaction did not return a hash.");
     }
 
-    const after = await ua.getEIP7702Deployments();
-    const arbAfter = (after as Array<{ chainId: number; isDelegated?: boolean }>).find(
-      (d) => d.chainId === chainId,
-    );
-
+    const after = await read7702Delegate(ownerAddress);
     return {
-      address: uaAddress,
+      address: ownerAddress,
       eip7702TxHash: transactionHash,
-      eip7702Delegated: Boolean(arbAfter?.isDelegated ?? true),
+      eip7702Delegated: after === kernelAddress.toLowerCase(),
     };
   } catch (error) {
-    throw formatWalletError(error, "EIP-7702 delegation failed");
+    throw formatWalletError(error, "EIP-7702 Kernel delegation failed");
   }
 }
 
@@ -779,12 +742,62 @@ export async function signActivationTransactions(
   return signed;
 }
 
+/** Purposes the policy-bounded session key is allowed to execute (USDC Aave path). */
+const SESSION_SUPPORTED_PURPOSES = new Set(["approve_usdc_aave", "supply_aave_usdc"]);
+
+type SignedTx = {
+  purpose: string;
+  tx_hash: string;
+  leg_asset?: string;
+  amount_usdc?: number;
+  estimated_apy?: number;
+};
+
 /**
- * Optional deploy: fund check → Magic signs Aave txs → backend confirm.
- * Only called when the user explicitly chooses to put money to work.
- * Throws if underfunded (402) or any tx fails — never fakes success.
+ * Ensure the user has granted the AXIS agent a policy-bounded session key.
+ * Prompts exactly one Magic signature the first time, then persists it server-side.
+ * Returns the serialized approval, or null when sessions aren't available (e.g. testnet).
  */
-export async function deployStrategyWithSignatures(body: {
+export async function ensureSessionApproval(
+  userId: string,
+  uaAddress: string,
+): Promise<string | null> {
+  if (!isArbitrumOne()) return null;
+
+  const status = await axisApi.status(userId).catch(() => null);
+  if (status?.session_active && status.session_approval) {
+    return status.session_approval;
+  }
+
+  const magic = getMagic();
+  await magic.evm.switchChain(ARBITRUM_ONE_CHAIN_ID);
+  const provider = magic.rpcProvider as {
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+
+  const { address: sessionSignerAddress } = await getSessionSignerAddress();
+  const approval = await buildSessionApproval({
+    magicProvider: provider,
+    ownerAddress: uaAddress,
+    sessionSignerAddress,
+  });
+
+  await axisApi.enableSession({
+    user_id: userId,
+    ua_address: uaAddress,
+    approval,
+    session_signer: sessionSignerAddress,
+  });
+
+  return approval;
+}
+
+/**
+ * Deploy the locked plan. When a session key is active, USDC Aave legs execute
+ * gaslessly through the agent (zero prompts). Any USDT swap legs fall back to a
+ * single Magic signature. Never fakes success — throws on underfunding or revert.
+ */
+export async function deployStrategy(body: {
   user_id: string;
   budget_usdc: number;
   risk_level: string;
@@ -795,12 +808,51 @@ export async function deployStrategyWithSignatures(body: {
   const prepared = await axisApi.prepareDeploy(body);
   if (prepared.status !== "pending_signatures" || !prepared.plan || !prepared.transactions?.length) {
     throw new Error(
-      prepared.message ||
-        "Could not prepare deposits. Check your USDC balance on Arbitrum.",
+      prepared.message || "Could not prepare deposits. Check your USDC balance on Arbitrum.",
     );
   }
 
-  const signed_txs = await signActivationTransactions(prepared.transactions);
+  const approval = await ensureSessionApproval(body.user_id, body.ua_address).catch(() => null);
+
+  const sessionTxs = prepared.transactions.filter((t) =>
+    SESSION_SUPPORTED_PURPOSES.has(t.purpose),
+  );
+  const clientTxs = prepared.transactions.filter(
+    (t) => !SESSION_SUPPORTED_PURPOSES.has(t.purpose),
+  );
+
+  const signed_txs: SignedTx[] = [];
+  const didToken = getStoredSession()?.didToken;
+
+  if (approval && didToken && sessionTxs.length > 0) {
+    const result = await executeSessionCalls({
+      data: {
+        didToken,
+        calls: sessionTxs.map((t) => ({ to: t.to, data: t.data, value: t.value ?? "0x0" })),
+      },
+    });
+    if (!result.success || !result.tx_hash) {
+      throw new Error("AXIS could not complete the deposit. Please try again.");
+    }
+    for (const t of sessionTxs) {
+      signed_txs.push({
+        purpose: t.purpose,
+        tx_hash: result.tx_hash,
+        leg_asset: t.leg_asset,
+        amount_usdc: t.amount_usdc,
+        estimated_apy: t.estimated_apy,
+      });
+    }
+  } else {
+    // No session (or unsupported): sign the USDC legs in-wallet too.
+    clientTxs.unshift(...sessionTxs);
+  }
+
+  if (clientTxs.length > 0) {
+    const signedClient = await signActivationTransactions(clientTxs);
+    signed_txs.push(...signedClient);
+  }
+
   return axisApi.confirmActivate({
     user_id: body.user_id,
     ua_address: body.ua_address,
@@ -811,6 +863,52 @@ export async function deployStrategyWithSignatures(body: {
     plan: prepared.plan,
     signed_txs,
   });
+}
+
+/** Backwards-compatible alias. */
+export const deployStrategyWithSignatures = deployStrategy;
+
+/**
+ * Autonomous rebalance via the session key (no prompts). Backend returns the
+ * withdraw/supply calls; the agent executes them gaslessly.
+ */
+export async function rebalanceViaSession(body: {
+  user_id: string;
+  ua_address: string;
+  instruction: string;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  const prepared = await axisApi.prepareRebalance(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const approval = await ensureSessionApproval(body.user_id, body.ua_address);
+  if (!approval) {
+    throw new Error("Turn on hands-off mode first by depositing once.");
+  }
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not complete the rebalance. Please try again.");
+  }
+
+  const confirmed = await axisApi.confirmRebalance({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    instruction: body.instruction,
+    tx_hash: result.tx_hash,
+    actions: prepared.actions ?? [],
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
 }
 
 export async function logout(): Promise<void> {
