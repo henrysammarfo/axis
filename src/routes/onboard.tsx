@@ -11,8 +11,22 @@ import {
   warmupWalletSdk,
   walletConfigErrors,
 } from "../lib/wallet";
-import { useAxisConfig } from "../hooks/useAxis";
+import { useAxisConfig, useStrategyPreview } from "../hooks/useAxis";
 import { brandHeadMeta } from "../lib/seo";
+import {
+  GOALS,
+  RISKS,
+  MIN_BUDGET_USDC,
+  MAX_BUDGET_USDC,
+  type GoalLabel,
+  type RiskLevel,
+} from "../lib/strategy";
+
+const RISK_LABEL: Record<RiskLevel, string> = {
+  conservative: "Safe",
+  moderate: "Balanced",
+  aggressive: "Bold",
+};
 
 export const Route = createFileRoute("/onboard")({
   beforeLoad: () => {
@@ -30,9 +44,6 @@ export const Route = createFileRoute("/onboard")({
   component: Onboard,
 });
 
-const GOALS = ["Maximize yield", "Grow steadily", "Protect my money"] as const;
-const RISKS = ["conservative", "moderate", "aggressive"] as const;
-
 function Onboard() {
   const navigate = useNavigate();
   const { data: config, isError: configError, error: configLoadError } = useAxisConfig();
@@ -40,10 +51,12 @@ function Onboard() {
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState("Signing in…");
   const [error, setError] = useState<string | null>(null);
-  const [budget, setBudget] = useState(500);
-  const [risk, setRisk] = useState<(typeof RISKS)[number]>("moderate");
-  const [goal, setGoal] = useState<string>(GOALS[0]);
+  const [budget, setBudget] = useState(100);
+  const [risk, setRisk] = useState<RiskLevel>("moderate");
+  const [goal, setGoal] = useState<GoalLabel>(GOALS[0]);
   const session = getStoredSession();
+
+  const { data: preview } = useStrategyPreview(budget, risk, goal, step === 2);
 
   useEffect(() => {
     warmupWalletSdk();
@@ -183,9 +196,10 @@ function Onboard() {
           {step === 2 && (
             <>
               <div>
-                <h1 className="text-4xl tracking-[-0.04em]">Set your budget</h1>
+                <h1 className="text-4xl tracking-[-0.04em]">Build your agent</h1>
                 <p className="mt-3 text-white/60 text-sm">
-                  AXIS will find the best yields and manage your portfolio automatically.
+                  Pick a vibe and a goal. AXIS handles the rest. No deposit needed yet — you can add
+                  money and start whenever you like.
                 </p>
                 {session?.email && (
                   <p className="mt-2 text-xs text-white/40">Signed in as {session.email}</p>
@@ -194,30 +208,33 @@ function Onboard() {
 
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-white/50 uppercase tracking-widest text-xs">Budget</span>
+                  <span className="text-white/50 uppercase tracking-widest text-xs">
+                    Starting amount
+                  </span>
                   <span className="text-2xl tracking-[-0.04em]">${budget}</span>
                 </div>
                 <input
                   type="range"
-                  min={50}
-                  max={10000}
-                  step={50}
+                  min={MIN_BUDGET_USDC}
+                  max={MAX_BUDGET_USDC}
+                  step={10}
                   value={budget}
                   onChange={(e) => setBudget(Number(e.target.value))}
                   className="w-full accent-[color:var(--color-lime)]"
                 />
                 <div className="flex justify-between text-[10px] text-white/40 mt-1">
-                  <span>$50</span>
-                  <span>$10,000</span>
+                  <span>${MIN_BUDGET_USDC}</span>
+                  <span>${MAX_BUDGET_USDC.toLocaleString()}</span>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs uppercase tracking-widest text-white/50 mb-3">Risk level</p>
+                <p className="text-xs uppercase tracking-widest text-white/50 mb-3">Your vibe</p>
                 <div className="flex gap-2">
                   {RISKS.map((r) => (
                     <button
                       key={r}
+                      type="button"
                       onClick={() => setRisk(r)}
                       className={`flex-1 py-2 text-[10px] uppercase tracking-widest rounded-full border ${
                         risk === r
@@ -225,18 +242,19 @@ function Onboard() {
                           : "border-white/20 text-white/70"
                       }`}
                     >
-                      {r}
+                      {RISK_LABEL[r]}
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="text-xs uppercase tracking-widest text-white/50 mb-3">Goal</p>
+                <p className="text-xs uppercase tracking-widest text-white/50 mb-3">Your goal</p>
                 <div className="flex flex-wrap gap-2">
                   {GOALS.map((g) => (
                     <button
                       key={g}
+                      type="button"
                       onClick={() => setGoal(g)}
                       className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-full border ${
                         goal === g
@@ -250,19 +268,31 @@ function Onboard() {
                 </div>
               </div>
 
-              {config && (
-                <p className="text-[10px] text-white/30 uppercase tracking-widest">
-                  AI: {config.ai.active_provider} · Wallet:{" "}
-                  {config.wallet.magic ? "ready" : "pending keys"}
-                </p>
+              {preview?.plan && (
+                <div className="border border-white/10 bg-white/[0.03] p-4 space-y-2 text-sm">
+                  <p className="text-[10px] uppercase tracking-widest text-white/45">
+                    Here's the plan
+                  </p>
+                  <p className="text-white/80 leading-relaxed">
+                    Put ${preview.plan.deployed_usdc.toFixed(0)} to work
+                    {preview.plan.cash_buffer_usdc > 0
+                      ? `, keep $${preview.plan.cash_buffer_usdc.toFixed(0)} in reserve`
+                      : ""}{" "}
+                    · earning about {preview.plan.blended_apy.toFixed(1)}% a year.
+                  </p>
+                </div>
               )}
 
               <button
+                type="button"
                 onClick={onActivate}
                 className="w-full bg-[color:var(--color-lime)] text-black rounded-full py-4 text-sm uppercase tracking-widest font-medium"
               >
-                Activate AXIS
+                Create my agent
               </button>
+              <p className="text-[10px] text-white/30 text-center uppercase tracking-widest">
+                Free to set up — no deposit, no signing yet
+              </p>
             </>
           )}
         </div>

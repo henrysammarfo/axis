@@ -41,16 +41,16 @@ async def test_activate_requires_auth(client):
 
 @pytest.mark.asyncio
 async def test_activate_with_auth(client, monkeypatch):
-    async def mock_run(self, **kwargs):
-        return {
-            "actions": [{"tool": "check_aave_yield", "input": {}, "result": {"supply_apy": 4.2}}],
-            "explanation": "Test allocation complete.",
-            "user_id": kwargs["user_id"],
-            "budget_usdc": kwargs["budget_usdc"],
-            "provider": "venice",
-        }
+    """Activate is setup-only: saves plan, no funding/signing required."""
 
-    monkeypatch.setattr("routes.agent.AxisAgent.run", mock_run)
+    async def mock_apys():
+        return {"USDC": 4.2, "USDT": 4.0}
+
+    async def mock_explain(self, plan):
+        return {"explanation": "Test plan locked.", "provider": "template", "actions": []}
+
+    monkeypatch.setattr("routes.agent._live_aave_apys", mock_apys)
+    monkeypatch.setattr("routes.agent.AxisAgent.explain_plan", mock_explain)
 
     r = await client.post(
         "/api/agent/activate",
@@ -59,14 +59,68 @@ async def test_activate_with_auth(client, monkeypatch):
             "user_id": "test-user",
             "budget_usdc": 500,
             "risk_level": "moderate",
-            "goal": "maximize yield",
+            "goal": "Maximize yield",
             "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
         },
     )
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "activated"
+    assert "plan" in data
+    assert "transactions" not in data
     assert "explanation" in data
+
+
+@pytest.mark.asyncio
+async def test_deploy_prepare_returns_transactions(client, monkeypatch):
+    async def mock_apys():
+        return {"USDC": 4.2, "USDT": 4.0}
+
+    def mock_funding(owner, budget):
+        return budget
+
+    monkeypatch.setattr("routes.agent._live_aave_apys", mock_apys)
+    monkeypatch.setattr("routes.agent.require_usdc_funding", mock_funding)
+
+    await client.post(
+        "/api/auth/register",
+        json={
+            "did_token": "test-did-token",
+            "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        },
+    )
+
+    r = await client.post(
+        "/api/agent/deploy/prepare",
+        headers=AUTH,
+        json={
+            "user_id": "test-user",
+            "budget_usdc": 500,
+            "risk_level": "moderate",
+            "goal": "Maximize yield",
+            "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "pending_signatures"
+    assert len(data["transactions"]) >= 2
+
+
+@pytest.mark.asyncio
+async def test_activate_rejects_invalid_risk(client):
+    r = await client.post(
+        "/api/agent/activate",
+        headers=AUTH,
+        json={
+            "user_id": "test-user",
+            "budget_usdc": 100,
+            "risk_level": "low",
+            "goal": "Maximize yield",
+            "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        },
+    )
+    assert r.status_code == 422
 
 
 @pytest.mark.asyncio

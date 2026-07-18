@@ -5,6 +5,7 @@ import type { ActionEntry } from "./portfolio";
 
 export type AgentStatus = {
   active: boolean;
+  deployed?: boolean;
   positions: Array<{
     protocol: string;
     asset: string;
@@ -59,13 +60,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = err.detail;
-    throw new Error(
+    const message =
       typeof detail === "string"
         ? detail
         : Array.isArray(detail)
           ? detail[0]?.msg
-          : `API error ${res.status}`,
-    );
+          : `API error ${res.status}`;
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
@@ -128,6 +129,12 @@ export const axisApi = {
       }),
     }),
 
+  previewStrategy: (body: { budget_usdc: number; risk_level: string; goal: string }) =>
+    request<{
+      plan: import("./strategy").StrategyPlan;
+      live_apys: Record<string, number>;
+    }>("/api/agent/strategy/preview", { method: "POST", body: JSON.stringify(body) }),
+
   activate: (body: {
     user_id: string;
     budget_usdc: number;
@@ -137,18 +144,59 @@ export const axisApi = {
     sra_address?: string;
   }) =>
     request<{
+      status: "activated" | string;
+      explanation: string;
+      plan?: import("./strategy").StrategyPlan;
+      provider?: string;
+      message?: string;
+    }>("/api/agent/activate", { method: "POST", body: JSON.stringify(body) }),
+
+  prepareDeploy: (body: {
+    user_id: string;
+    budget_usdc: number;
+    risk_level: string;
+    goal: string;
+    ua_address: string;
+    sra_address?: string;
+  }) =>
+    request<{
+      status: "pending_signatures" | string;
+      plan: import("./strategy").StrategyPlan;
+      transactions: import("./strategy").ActivationTransaction[];
+      message?: string;
+    }>("/api/agent/deploy/prepare", { method: "POST", body: JSON.stringify(body) }),
+
+  confirmActivate: (body: {
+    user_id: string;
+    ua_address: string;
+    sra_address?: string;
+    budget_usdc: number;
+    risk_level: string;
+    goal: string;
+    plan: import("./strategy").StrategyPlan;
+    signed_txs: Array<{
+      purpose: string;
+      tx_hash: string;
+      leg_asset?: string;
+      amount_usdc?: number;
+      estimated_apy?: number;
+    }>;
+  }) =>
+    request<{
       status: string;
       explanation: string;
       actions_taken: number;
-      actions: unknown[];
-      provider: string;
-    }>("/api/agent/activate", { method: "POST", body: JSON.stringify(body) }),
+      message?: string;
+    }>("/api/agent/activate/confirm", { method: "POST", body: JSON.stringify(body) }),
 
   rebalance: (body: { user_id: string; ua_address: string; instruction: string }) =>
-    request<{ status: string; explanation: string; actions: unknown[] }>("/api/agent/rebalance", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    request<{ status: string; explanation: string; actions: unknown[]; plan?: unknown }>(
+      "/api/agent/rebalance",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
 
   status: (userId: string) => request<AgentStatus>(`/api/agent/status/${userId}`),
 

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axisApi } from "../lib/api";
-import { getStoredSession } from "../lib/wallet";
+import { deployStrategyWithSignatures, getStoredSession } from "../lib/wallet";
 
 export function useAxisConfig() {
   return useQuery({
@@ -39,6 +39,21 @@ export function useAxisHistory(userId: string | undefined) {
   });
 }
 
+export function useStrategyPreview(
+  budget: number,
+  risk: string,
+  goal: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["axis", "strategy-preview", budget, risk, goal],
+    queryFn: () =>
+      axisApi.previewStrategy({ budget_usdc: budget, risk_level: risk, goal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 export function useSession() {
   return getStoredSession();
 }
@@ -47,6 +62,18 @@ export function useActivateAxis() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: axisApi.activate,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "report", vars.user_id] });
+      qc.invalidateQueries({ queryKey: ["axis", "history", vars.user_id] });
+    },
+  });
+}
+
+export function useDeployStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deployStrategyWithSignatures,
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
       qc.invalidateQueries({ queryKey: ["axis", "report", vars.user_id] });

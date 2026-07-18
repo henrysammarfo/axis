@@ -38,12 +38,20 @@ import {
   useAxisHistory,
   useAxisReport,
   useAxisStatus,
+  useDeployStrategy,
   useRebalanceAxis,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 
 import { truncateAddress } from "../../lib/api";
 import { brandHeadMeta } from "../../lib/seo";
+import { GOALS, RISKS, type GoalLabel, type RiskLevel } from "../../lib/strategy";
+
+const RISK_LABEL: Record<RiskLevel, string> = {
+  conservative: "Safe",
+  moderate: "Balanced",
+  aggressive: "Bold",
+};
 
 const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
 const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
@@ -75,14 +83,20 @@ function EmptyState({ message }: { message: string }) {
   return <div className="p-10 text-center text-white/40 text-sm">{message}</div>;
 }
 
-function Sparkline() {
-  const pts = [8, 12, 10, 16, 18, 14, 22, 24, 20, 28, 32, 30, 36, 40];
-  const max = Math.max(...pts);
+function Sparkline({ points }: { points: number[] }) {
+  if (points.length < 2 || points.every((p) => p === 0)) {
+    return (
+      <div className="h-full grid place-items-center text-xs text-white/30 uppercase tracking-widest">
+        No yield history yet
+      </div>
+    );
+  }
+  const max = Math.max(...points, 0.01);
   const w = 400,
     h = 100;
-  const d = pts
+  const d = points
     .map((v, i) => {
-      const x = (i / (pts.length - 1)) * w;
+      const x = (i / (points.length - 1)) * w;
       const y = h - (v / max) * h;
       return `${i === 0 ? "M" : "L"}${x},${y}`;
     })
@@ -114,6 +128,7 @@ function Dashboard() {
   const { data: axisReport } = useAxisReport(userId);
   const { data: historyData } = useAxisHistory(userId);
   const activateMutation = useActivateAxis();
+  const deployMutation = useDeployStrategy();
   const rebalanceMutation = useRebalanceAxis();
   const activatedRef = useRef(false);
   const [copied, setCopied] = useState(false);
@@ -121,6 +136,11 @@ function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [rebalanceText, setRebalanceText] = useState("");
   const [activating, setActivating] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [savingStrategy, setSavingStrategy] = useState(false);
+
+  const activeRisk = (axisStatus?.risk_level || risk || "moderate") as RiskLevel;
+  const activeGoal = (axisStatus?.goal || goal || GOALS[0]) as GoalLabel;
 
   const sra = axisStatus?.sra_address ?? session.sraAddress;
   const uaDisplay = axisStatus?.ua_address ?? session.uaAddress;
@@ -134,12 +154,14 @@ function Dashboard() {
           user_id: userId,
           budget_usdc: Number(budgetParam ?? budget),
           risk_level: risk ?? "moderate",
-          goal: goal ?? "maximize yield",
+          goal: goal ?? "Maximize yield",
           ua_address: session.uaAddress,
           sra_address: session.sraAddress,
         })
         .then((res) => {
-          toast.success("AXIS activated", { description: res.explanation.slice(0, 120) });
+          toast.success("AXIS is set up", {
+            description: (res.message || res.explanation || "Your strategy is saved.").slice(0, 160),
+          });
           navigate({
             search: (p) => ({
               ...p,
@@ -151,10 +173,62 @@ function Dashboard() {
             replace: true,
           });
         })
-        .catch((e: Error) => toast.error("Activation failed", { description: e.message }))
+        .catch((e: Error) => {
+          activatedRef.current = false;
+          toast.error("Setup failed", { description: e.message });
+        })
         .finally(() => setActivating(false));
     }
   }, [activate, userId, session, budgetParam, risk, goal, budget, activateMutation, navigate]);
+
+  const onChangeStrategy = async (nextRisk: RiskLevel, nextGoal: GoalLabel) => {
+    if (!userId || !session.uaAddress) return;
+    if (nextRisk === activeRisk && nextGoal === activeGoal) return;
+    setSavingStrategy(true);
+    try {
+      await activateMutation.mutateAsync({
+        user_id: userId,
+        budget_usdc: axisStatus?.budget_usdc || Number(budgetParam ?? budget),
+        risk_level: nextRisk,
+        goal: nextGoal,
+        ua_address: session.uaAddress,
+        sra_address: session.sraAddress,
+      });
+      toast.success("Strategy updated", {
+        description: `AXIS is now ${RISK_LABEL[nextRisk].toLowerCase()} · ${nextGoal.toLowerCase()}.`,
+      });
+    } catch (e) {
+      toast.error("Couldn't update", {
+        description: e instanceof Error ? e.message : "Try again in a moment.",
+      });
+    } finally {
+      setSavingStrategy(false);
+    }
+  };
+
+  const onDeploy = async () => {
+    if (!userId || !session.uaAddress) return;
+    setDeploying(true);
+    try {
+      const res = await deployMutation.mutateAsync({
+        user_id: userId,
+        budget_usdc: axisStatus?.budget_usdc || Number(budgetParam ?? budget),
+        risk_level: axisStatus?.risk_level || risk || "moderate",
+        goal: axisStatus?.goal || goal || "Maximize yield",
+        ua_address: session.uaAddress,
+        sra_address: session.sraAddress,
+      });
+      toast.success("Funds deployed", {
+        description: (res.explanation || "Your Aave positions are live.").slice(0, 160),
+      });
+    } catch (e) {
+      toast.error("Deploy failed", {
+        description: e instanceof Error ? e.message : "Add USDC on Arbitrum, then try again.",
+      });
+    } finally {
+      setDeploying(false);
+    }
+  };
 
   const setTab = (t: Tab) =>
     navigate({
@@ -202,10 +276,10 @@ function Dashboard() {
         ua_address: session.uaAddress,
         instruction: rebalanceText,
       });
-      toast.success("Rebalanced", { description: res.explanation.slice(0, 120) });
+      toast.success("AXIS heard you", { description: res.explanation.slice(0, 120) });
       setRebalanceText("");
     } catch (e) {
-      toast.error("Rebalance failed", {
+      toast.error("Couldn't do that", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
     }
@@ -315,7 +389,8 @@ function Dashboard() {
                     Total balance
                   </span>
                   <span className="shrink-0 inline-flex items-center gap-1 text-[color:var(--color-lime)] text-xs sm:text-sm">
-                    <TrendingUp {...ICON} /> +${weeklyYield.toFixed(2)} (7d)
+                    <TrendingUp {...ICON} /> ~
+                    {weeklyYield.toFixed(2)} est. / week
                   </span>
                 </div>
                 <div className="text-[44px] sm:text-[64px] lg:text-[110px] leading-none tracking-[-0.05em]">
@@ -327,7 +402,7 @@ function Dashboard() {
                 </div>
                 {activating && (
                   <p className="mt-4 text-sm text-[color:var(--color-lime)] uppercase tracking-widest">
-                    AXIS is analyzing yields…
+                    Setting up your agent…
                   </p>
                 )}
                 {axisReport?.report && (
@@ -336,8 +411,34 @@ function Dashboard() {
                   </p>
                 )}
                 <div className="mt-6 h-20 sm:h-24 text-[color:var(--color-lime)]">
-                  <Sparkline />
+                  <Sparkline
+                    points={
+                      positions.length
+                        ? positions.map((p) => Number(p.estimated_apy) || 0)
+                        : [0, 0]
+                    }
+                  />
                 </div>
+
+                {positions.length === 0 && (
+                  <div className="mt-6 border border-[color:var(--color-lime)]/30 bg-[color:var(--color-lime)]/5 p-5 rounded-md">
+                    <p className="text-sm text-white/80 leading-relaxed">
+                      Your agent is ready{" "}
+                      <span className="text-white/50">
+                        ({axisStatus?.risk_level || "moderate"} · {axisStatus?.goal || "—"})
+                      </span>
+                      . Add some USDC to your address below, then hit Begin — AXIS takes it from
+                      there.
+                    </p>
+                    <button
+                      onClick={onDeploy}
+                      disabled={deploying || !session.uaAddress}
+                      className="mt-4 bg-[color:var(--color-lime)] text-black rounded-full px-6 py-3 text-xs uppercase tracking-widest font-medium disabled:opacity-50 cursor-pointer"
+                    >
+                      {deploying ? "AXIS is getting to work…" : "Begin — put my money to work"}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Chain allocation summary */}
@@ -400,10 +501,11 @@ function Dashboard() {
                 <div className="border border-white/10 p-5 sm:p-6 flex flex-col justify-between">
                   <div>
                     <div className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 mb-2 inline-flex items-center gap-2">
-                      <Zap size={13} strokeWidth={1.75} /> Deposit address
+                      <Zap size={13} strokeWidth={1.75} /> Your deposit address
                     </div>
                     <div className="text-xs text-white/60">
-                      Send any token from any chain. AXIS receives cross-chain automatically.
+                      Send USDC from any chain or exchange. It lands here automatically — then hit
+                      Begin.
                     </div>
                   </div>
                   <div className="mt-5 bg-white/5 border border-white/10 rounded-md p-3 sm:p-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
@@ -438,16 +540,16 @@ function Dashboard() {
                 </div>
               </div>
 
-              {/* Tell AXIS */}
+              {/* Ask AXIS */}
               <div className="border border-white/10 p-5 sm:p-6">
                 <div className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 mb-3">
-                  Tell AXIS something
+                  Ask AXIS anything
                 </div>
                 <div className="flex gap-2">
                   <input
                     value={rebalanceText}
                     onChange={(e) => setRebalanceText(e.target.value)}
-                    placeholder="Move to safer positions"
+                    placeholder="Play it safer for a while"
                     className="flex-1 bg-white/5 border border-white/10 rounded-md px-4 py-3 text-sm outline-none focus:border-white/30"
                     onKeyDown={(e) => e.key === "Enter" && onRebalance()}
                   />
@@ -456,42 +558,70 @@ function Dashboard() {
                     disabled={rebalanceMutation.isPending || !userId}
                     className="shrink-0 bg-white text-black rounded-full px-5 py-3 text-xs uppercase tracking-widest disabled:opacity-50"
                   >
-                    {rebalanceMutation.isPending ? "…" : "Send"}
+                    {rebalanceMutation.isPending ? "…" : "Ask"}
                   </button>
                 </div>
               </div>
 
-              {/* Budget setter */}
+              {/* Strategy — change any time */}
               <div className="border border-white/10 p-5 sm:p-6">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 mb-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 mb-2">
                   <span className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 inline-flex items-center gap-2 truncate">
-                    <Shield size={13} strokeWidth={1.75} /> Weekly budget
+                    <Shield size={13} strokeWidth={1.75} /> Your strategy
                   </span>
-                  <span className="text-xl sm:text-2xl tracking-[-0.04em] shrink-0">${budget}</span>
+                  <span className="text-xl sm:text-2xl tracking-[-0.04em] shrink-0">
+                    ${axisStatus?.budget_usdc ?? budget}
+                  </span>
                 </div>
-                <input
-                  type="range"
-                  min={100}
-                  max={5000}
-                  step={50}
-                  value={budget}
-                  onChange={(e) => setBudget(Number(e.target.value))}
-                  className="w-full accent-[color:var(--color-lime)]"
-                />
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {["Preserve capital", "Steady yield", "Growth", "Aggressive"].map((g, i) => (
-                    <button
-                      key={g}
-                      className={`px-3 sm:px-4 py-2 text-[10px] sm:text-xs uppercase tracking-widest rounded-full border ${
-                        i === 1
-                          ? "bg-white text-black border-white"
-                          : "border-white/20 text-white/70"
-                      }`}
-                    >
-                      {g}
-                    </button>
-                  ))}
+                <p className="text-sm text-white/60 leading-relaxed">
+                  Switch your vibe any time. AXIS adjusts how it invests — safer, balanced, or going
+                  for max returns.
+                </p>
+
+                <div className="mt-4">
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">Risk</p>
+                  <div className="flex gap-2">
+                    {RISKS.map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => onChangeStrategy(r, activeGoal)}
+                        disabled={savingStrategy}
+                        className={`flex-1 py-2 text-[10px] uppercase tracking-widest rounded-full border disabled:opacity-50 ${
+                          activeRisk === r
+                            ? "bg-white text-black border-white"
+                            : "border-white/20 text-white/70"
+                        }`}
+                      >
+                        {RISK_LABEL[r]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">Goal</p>
+                  <div className="flex flex-wrap gap-2">
+                    {GOALS.map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => onChangeStrategy(activeRisk, g)}
+                        disabled={savingStrategy}
+                        className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-full border disabled:opacity-50 ${
+                          activeGoal === g
+                            ? "bg-white text-black border-white"
+                            : "border-white/20 text-white/70"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {savingStrategy && (
+                  <p className="mt-3 text-[10px] uppercase tracking-widest text-[color:var(--color-lime)]">
+                    Updating your agent…
+                  </p>
+                )}
               </div>
             </>
           )}

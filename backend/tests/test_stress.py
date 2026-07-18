@@ -43,7 +43,7 @@ async def test_concurrent_yield_endpoints(client):
 @pytest.mark.stress
 @pytest.mark.asyncio
 async def test_concurrent_activate_requests(client):
-    """10 parallel activations with mocked agent — exercises DB + rate limiter."""
+    """10 parallel activations with mocked funding — exercises DB + rate limiter."""
     from unittest.mock import AsyncMock, patch
 
     await client.post(
@@ -55,11 +55,15 @@ async def test_concurrent_activate_requests(client):
     )
 
     async def activate_once(i: int):
-        with patch("services.ai_agent.AxisAgent.run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = {
-                "actions": [],
+        with (
+            patch("routes.agent._live_aave_apys", new_callable=AsyncMock) as mock_apys,
+            patch("routes.agent.AxisAgent.explain_plan", new_callable=AsyncMock) as mock_explain,
+        ):
+            mock_apys.return_value = {"USDC": 4.0, "USDT": 4.0}
+            mock_explain.return_value = {
                 "explanation": f"ok-{i}",
-                "provider": "venice",
+                "provider": "template",
+                "actions": [],
             }
             return await client.post(
                 "/api/agent/activate",
@@ -68,7 +72,7 @@ async def test_concurrent_activate_requests(client):
                     "user_id": "test-user",
                     "budget_usdc": 25,
                     "risk_level": "moderate",
-                    "goal": f"stress-{i}",
+                    "goal": "Grow steadily",
                     "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
                 },
             )
@@ -77,3 +81,6 @@ async def test_concurrent_activate_requests(client):
     statuses = [r.status_code for r in results]
     assert all(s in {200, 429, 500} for s in statuses)
     assert 429 in statuses or 200 in statuses
+    if 200 in statuses:
+        body = next(r.json() for r in results if r.status_code == 200)
+        assert body["status"] == "activated"

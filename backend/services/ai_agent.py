@@ -1,4 +1,4 @@
-"""AXIS AI agent — Venice primary, OpenAI fallback."""
+"""AXIS AI agent — explains locked StrategyEngine plans (does not allocate)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ import httpx
 from config import get_settings
 from services.defi_executor import DeFiExecutor
 from services.portfolio_tracker import PortfolioTracker
-from services.tools import AXIS_SYSTEM, AXIS_TOOLS
+from services.strategy_engine import AllocationPlan, goal_label
+from services.tools import AXIS_EXPLAIN_SYSTEM, AXIS_SYSTEM, AXIS_TOOLS
 from services.x402_client import IntelligenceUnavailable, X402Client
 from services.yield_fetcher import YieldDataUnavailable
 
@@ -47,27 +48,71 @@ class AxisAgent:
         self._budget_usdc: float = 0.0
         self._allocated_usdc: float = 0.0
 
+    async def explain_plan(self, plan: AllocationPlan) -> dict[str, Any]:
+        """Plain-English explanation of a locked plan — no tool-based allocation."""
+        provider = self.settings.ai_provider
+        if provider not in ("venice", "openai"):
+            return {
+                "explanation": self._fallback_explanation(plan),
+                "provider": "template",
+                "actions": [],
+            }
+
+        prompt = (
+            "Explain this locked AXIS plan to the user. Do not change any numbers.\n\n"
+            f"{json.dumps(plan.to_dict(), indent=2)}"
+        )
+        try:
+            text = await self._chat_completion(
+                prompt,
+                provider,
+                max_tokens=220,
+                system=AXIS_EXPLAIN_SYSTEM,
+            )
+            return {"explanation": text, "provider": provider, "actions": []}
+        except Exception as exc:
+            logger.warning("Plan explanation LLM failed: %s", exc)
+            return {
+                "explanation": self._fallback_explanation(plan),
+                "provider": "template",
+                "actions": [],
+            }
+
     async def run(
         self,
         user_id: str,
         budget_usdc: float,
         risk_level: str,
         goal: str,
+        plan: AllocationPlan | None = None,
     ) -> dict[str, Any]:
+        """Compat entry: explain only. Allocation is done by StrategyEngine + client txs."""
         self._session_user_id = user_id
         self._budget_usdc = budget_usdc
         self._allocated_usdc = 0.0
 
-        provider = self.settings.ai_provider
-        if provider not in ("venice", "openai"):
-            raise RuntimeError(
-                "AI providers not configured. Set VENICE_API_KEY and OPENAI_API_KEY."
-            )
+        if plan is not None:
+            explained = await self.explain_plan(plan)
+            return {
+                "actions": explained["actions"],
+                "explanation": explained["explanation"],
+                "user_id": user_id,
+                "budget_usdc": budget_usdc,
+                "provider": explained["provider"],
+                "plan": plan.to_dict(),
+            }
 
-        if provider == "venice":
-            return await self._openai_compatible_loop(user_id, budget_usdc, risk_level, goal, "venice")
-
-        return await self._openai_compatible_loop(user_id, budget_usdc, risk_level, goal, "openai")
+        # Legacy path for rebalance with free-text — still no execute_allocation.
+        return {
+            "actions": [],
+            "explanation": (
+                f"Rebalance noted for risk={risk_level}. "
+                "AXIS uses a fixed Aave strategy matrix — open Activate again to redeploy."
+            ),
+            "user_id": user_id,
+            "budget_usdc": budget_usdc,
+            "provider": "template",
+        }
 
     async def generate_weekly_report(self, user_id: str) -> str:
         positions = await self.tracker.get_positions(user_id)
@@ -81,93 +126,12 @@ Actions this week: {json.dumps(history)}"""
 
         provider = self.settings.ai_provider
         if provider not in ("venice", "openai"):
-            raise RuntimeError("AI providers not configured")
+            return "Your Aave positions are open. Check the dashboard for live balances."
 
-        return await self._chat_completion(prompt, provider, max_tokens=300)
-
-    async def _openai_compatible_loop(
-        self,
-        user_id: str,
-        budget_usdc: float,
-        risk_level: str,
-        goal: str,
-        provider: str,
-    ) -> dict[str, Any]:
-        actions_taken: list[dict] = []
-        explanations: list[str] = []
-
-        messages = [
-            {"role": "system", "content": AXIS_SYSTEM},
-            {
-                "role": "user",
-                "content": self._user_prompt(user_id, budget_usdc, risk_level, goal),
-            },
-        ]
-
-        base_url = (
-            self.settings.venice_base_url
-            if provider == "venice"
-            else "https://api.openai.com/v1"
-        )
-        api_key = (
-            self.settings.venice_api_key
-            if provider == "venice"
-            else self.settings.openai_api_key
-        )
-        model = (
-            self.settings.venice_model
-            if provider == "venice"
-            else self.settings.openai_model
-        )
-
-        for _ in range(12):
-            async with httpx.AsyncClient(timeout=60) as client:
-                body: dict[str, Any] = {
-                    "model": model,
-                    "messages": messages,
-                    "tools": _openai_tools(),
-                    "max_tokens": 2000,
-                }
-                if provider == "venice":
-                    body["venice_parameters"] = {"enable_web_search": True}
-
-                r = await client.post(
-                    f"{base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json=body,
-                )
-                r.raise_for_status()
-                data = r.json()
-
-            choice = data["choices"][0]
-            message = choice["message"]
-
-            if choice.get("finish_reason") == "stop" or not message.get("tool_calls"):
-                if message.get("content"):
-                    explanations.append(message["content"])
-                break
-
-            messages.append(message)
-            for tool_call in message.get("tool_calls", []):
-                fn = tool_call["function"]
-                tool_input = json.loads(fn["arguments"])
-                result = await self._execute_tool(fn["name"], tool_input, user_id)
-                actions_taken.append({"tool": fn["name"], "input": tool_input, "result": result})
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call["id"],
-                        "content": json.dumps(result),
-                    }
-                )
-
-        return {
-            "actions": actions_taken,
-            "explanation": "\n\n".join(explanations),
-            "user_id": user_id,
-            "budget_usdc": budget_usdc,
-            "provider": provider,
-        }
+        try:
+            return await self._chat_completion(prompt, provider, max_tokens=300)
+        except Exception:
+            return "Your Aave positions are open. Check the dashboard for live balances."
 
     async def _execute_tool(self, tool_name: str, tool_input: dict, user_id: str) -> dict:
         session_user_id = self._session_user_id or user_id
@@ -179,36 +143,15 @@ Actions this week: {json.dumps(history)}"""
                 return await self.defi.get_aave_apy(tool_input["asset"])
             if tool_name == "check_gmx_apy":
                 return await self.defi.get_gmx_apy()
-            if tool_name == "check_uniswap_pool":
-                return await self.defi.get_uniswap_apy(
-                    tool_input["token0"],
-                    tool_input["token1"],
-                    tool_input.get("fee_tier", 3000),
-                )
+            if tool_name == "get_uniswap_pool":
+                return {"error": "Uniswap is not in the v1 strategy matrix"}
             if tool_name == "get_market_intelligence":
                 return await self.x402.fetch_intelligence(tool_input["query"], session_user_id)
             if tool_name == "execute_allocation":
-                amount = float(tool_input["amount_usdc"])
-                remaining = self._budget_usdc - self._allocated_usdc
-                if amount <= 0:
-                    return {"success": False, "error": "Allocation amount must be positive"}
-                if amount > remaining + 0.01:
-                    return {
-                        "success": False,
-                        "error": f"Allocation exceeds remaining budget (${remaining:.2f} USDC left)",
-                    }
-
-                result = await self.defi.execute(
-                    protocol=tool_input["protocol"],
-                    asset=tool_input["asset"],
-                    amount_usdc=amount,
-                    action=tool_input["action"],
-                    user_id=session_user_id,
-                )
-                if result.get("success"):
-                    self._allocated_usdc += amount
-                await self.tracker.log_action(session_user_id, tool_name, tool_input, result)
-                return result
+                return {
+                    "success": False,
+                    "error": "Allocations are locked by StrategyEngine — AI cannot execute freely",
+                }
             if tool_name == "get_current_positions":
                 return {"positions": await self.tracker.get_positions(session_user_id)}
         except (YieldDataUnavailable, IntelligenceUnavailable) as exc:
@@ -219,7 +162,13 @@ Actions this week: {json.dumps(history)}"""
 
         return {"error": f"Unknown tool: {tool_name}"}
 
-    async def _chat_completion(self, prompt: str, provider: str, max_tokens: int = 300) -> str:
+    async def _chat_completion(
+        self,
+        prompt: str,
+        provider: str,
+        max_tokens: int = 300,
+        system: str | None = None,
+    ) -> str:
         base_url = (
             self.settings.venice_base_url if provider == "venice" else "https://api.openai.com/v1"
         )
@@ -228,22 +177,33 @@ Actions this week: {json.dumps(history)}"""
         )
         model = self.settings.venice_model if provider == "venice" else self.settings.openai_model
 
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens},
             )
             r.raise_for_status()
             return r.json()["choices"][0]["message"]["content"]
 
-    def _user_prompt(self, user_id: str, budget_usdc: float, risk_level: str, goal: str) -> str:
-        return f"""Manage this portfolio:
-- Budget: ${budget_usdc} USDC
-- Risk level: {risk_level} (conservative/moderate/aggressive)
-- User goal: {goal}
-- User ID: {user_id}
-
-Check current yields, get market intelligence, then allocate the budget.
-Explain each decision in one plain-English sentence.
-Execute the allocations."""
+    @staticmethod
+    def _fallback_explanation(plan: AllocationPlan) -> str:
+        legs = ", ".join(
+            f"${leg.amount_usdc:.2f} to Aave {leg.asset} (~{leg.estimated_apy:.2f}% APY)"
+            for leg in plan.legs
+        )
+        buffer = (
+            f" Holding ${plan.cash_buffer_usdc:.2f} USDC as a cash buffer."
+            if plan.cash_buffer_usdc > 0
+            else ""
+        )
+        return (
+            f"{goal_label(plan.goal)} with a {plan.risk_level.value} profile: "
+            f"deploying {legs}.{buffer} "
+            f"Estimated ~${plan.estimated_weekly_yield_usdc:.4f} per week at current rates."
+        )

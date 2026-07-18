@@ -55,6 +55,31 @@ class PortfolioTracker:
         await self.db.flush()
         return user
 
+    async def save_strategy_prefs(
+        self,
+        user_id: str,
+        budget_usdc: float,
+        risk_level: str,
+        goal: str,
+        ua_address: str,
+        sra_address: str | None = None,
+        *,
+        mark_active: bool = False,
+    ) -> User:
+        """Persist risk/goal/budget. Only mark active when on-chain legs are confirmed."""
+        await assert_address_not_claimed(self, ua_address, user_id)
+        user = await self.ensure_user(user_id, ua_address=ua_address, sra_address=sra_address)
+        user.budget_usdc = budget_usdc
+        user.risk_level = risk_level
+        user.goal = goal
+        user.ua_address = normalize_address(ua_address)
+        if mark_active:
+            user.active = True
+        if sra_address:
+            user.sra_address = normalize_address(sra_address)
+        await self.db.flush()
+        return user
+
     async def activate_user(
         self,
         user_id: str,
@@ -64,15 +89,22 @@ class PortfolioTracker:
         ua_address: str,
         sra_address: str | None = None,
     ) -> User:
-        await assert_address_not_claimed(self, ua_address, user_id)
-        user = await self.ensure_user(user_id, ua_address=ua_address, sra_address=sra_address)
-        user.budget_usdc = budget_usdc
-        user.risk_level = risk_level
-        user.goal = goal
-        user.ua_address = normalize_address(ua_address)
+        """Backward-compatible helper — prefer save_strategy_prefs + confirm."""
+        return await self.save_strategy_prefs(
+            user_id,
+            budget_usdc,
+            risk_level,
+            goal,
+            ua_address,
+            sra_address,
+            mark_active=True,
+        )
+
+    async def mark_active(self, user_id: str) -> User | None:
+        user = await self.get_user(user_id)
+        if not user:
+            return None
         user.active = True
-        if sra_address:
-            user.sra_address = normalize_address(sra_address)
         await self.db.flush()
         return user
 
@@ -175,7 +207,9 @@ class PortfolioTracker:
         )
 
         return {
-            "active": len(positions) > 0 or (user.active if user else False),
+            # Configured (agent set up) vs deployed (real tx-backed positions).
+            "active": bool(user.active) if user else False,
+            "deployed": len(positions) > 0,
             "positions": positions,
             "total_invested_usdc": round(total_invested, 2),
             "estimated_weekly_yield_usdc": round(estimated_weekly_yield, 2),

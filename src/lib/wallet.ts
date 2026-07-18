@@ -680,6 +680,139 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
   }
 }
 
+export type UnsignedActivationTx = {
+  purpose: string;
+  leg_asset?: string;
+  amount_usdc?: number;
+  estimated_apy?: number;
+  to: string;
+  data: string;
+  value?: string;
+  chain_id: number;
+};
+
+/** Sign+broadcast each Aave activation tx via Magic (user pays gas or ZeroDev if configured). */
+export async function signActivationTransactions(
+  transactions: UnsignedActivationTx[],
+): Promise<
+  Array<{
+    purpose: string;
+    tx_hash: string;
+    leg_asset?: string;
+    amount_usdc?: number;
+    estimated_apy?: number;
+  }>
+> {
+  const magic = getMagic();
+  const chainId = arbitrumChainId();
+  await magic.evm.switchChain(chainId);
+
+  const provider = magic.rpcProvider as {
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+
+  const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
+  const from = accounts?.[0];
+  if (!from) {
+    throw new Error("Magic wallet not ready. Sign in again.");
+  }
+
+  const signed: Array<{
+    purpose: string;
+    tx_hash: string;
+    leg_asset?: string;
+    amount_usdc?: number;
+    estimated_apy?: number;
+  }> = [];
+
+  for (const tx of transactions) {
+    const hash = (await provider.request({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from,
+          to: tx.to,
+          data: tx.data,
+          value: tx.value ?? "0x0",
+        },
+      ],
+    })) as string;
+
+    if (!hash || !hash.startsWith("0x")) {
+      throw new Error(`Wallet did not return a transaction hash for ${tx.purpose}`);
+    }
+
+    // Wait for inclusion via RPC
+    const rpcUrl = requireEnv("VITE_ARBITRUM_RPC_URL");
+    for (let i = 0; i < 60; i++) {
+      const receiptRes = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_getTransactionReceipt",
+          params: [hash],
+        }),
+      });
+      const receiptJson = (await receiptRes.json()) as {
+        result?: { status?: string } | null;
+      };
+      if (receiptJson.result) {
+        if (receiptJson.result.status === "0x0") {
+          throw new Error(`On-chain transaction reverted (${tx.purpose}): ${hash}`);
+        }
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    signed.push({
+      purpose: tx.purpose,
+      tx_hash: hash,
+      leg_asset: tx.leg_asset,
+      amount_usdc: tx.amount_usdc,
+      estimated_apy: tx.estimated_apy,
+    });
+  }
+
+  return signed;
+}
+
+/**
+ * Optional deploy: fund check → Magic signs Aave txs → backend confirm.
+ * Only called when the user explicitly chooses to put money to work.
+ * Throws if underfunded (402) or any tx fails — never fakes success.
+ */
+export async function deployStrategyWithSignatures(body: {
+  user_id: string;
+  budget_usdc: number;
+  risk_level: string;
+  goal: string;
+  ua_address: string;
+  sra_address?: string;
+}): Promise<{ status: string; explanation: string; message?: string }> {
+  const prepared = await axisApi.prepareDeploy(body);
+  if (prepared.status !== "pending_signatures" || !prepared.plan || !prepared.transactions?.length) {
+    throw new Error(
+      prepared.message ||
+        "Could not prepare deposits. Check your USDC balance on Arbitrum.",
+    );
+  }
+
+  const signed_txs = await signActivationTransactions(prepared.transactions);
+  return axisApi.confirmActivate({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    sra_address: body.sra_address,
+    budget_usdc: body.budget_usdc,
+    risk_level: body.risk_level,
+    goal: body.goal,
+    plan: prepared.plan,
+    signed_txs,
+  });
+}
+
 export async function logout(): Promise<void> {
   if (!isBrowser()) {
     clearSession();

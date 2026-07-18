@@ -1,4 +1,8 @@
-"""DeFi protocol execution on Arbitrum via Universal Account + ZeroDev."""
+"""DeFi protocol helpers on Arbitrum.
+
+Production activation builds Aave calldata in `aave_transactions` and requires
+client-signed txs. This module retains yield reads + legacy execute() for tests.
+"""
 
 from __future__ import annotations
 

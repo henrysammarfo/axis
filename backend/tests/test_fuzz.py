@@ -68,7 +68,7 @@ def test_normalize_address_fuzz(addr):
 @pytest.mark.fuzz
 @pytest.mark.asyncio
 async def test_random_goal_strings_activate_validation(client):
-    """Random unicode/noise goals should not crash auth layer (422/401/403 only)."""
+    """Invalid risk/goal must be rejected with 422 (or auth errors) — never invent allocations."""
     for _ in range(20):
         noise = "".join(random.choices(string.printable, k=random.randint(0, 200)))
         r = await client.post(
@@ -82,4 +82,6 @@ async def test_random_goal_strings_activate_validation(client):
                 "ua_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
             },
         )
-        assert r.status_code in {200, 401, 403, 422, 429, 500}
+        assert r.status_code in {401, 403, 422, 429}
+        if r.status_code == 200:
+            raise AssertionError("Invalid risk/goal must not activate")

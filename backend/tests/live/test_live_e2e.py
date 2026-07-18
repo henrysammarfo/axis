@@ -1,6 +1,4 @@
-"""Live API e2e — full activate flow with real on-chain execution."""
-
-from unittest.mock import patch
+"""Live API e2e — activate returns pending Aave calldata when funded."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from config import get_settings
 from database import Base, get_db
 from main import app
-from services.ai_agent import AxisAgent
 
 AUTH = {"Authorization": "Bearer test-did-token"}
 UA = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0"
@@ -38,6 +35,7 @@ async def live_client():
 
 
 async def _run_with_real_defi(self, user_id, budget_usdc, risk_level, goal):
+    """Kept for optional manual live experiments — not used by activate e2e."""
     result = await self.defi.execute(
         protocol="aave",
         asset="USDC",
@@ -57,34 +55,46 @@ async def _run_with_real_defi(self, user_id, budget_usdc, risk_level, goal):
 
 @pytest.mark.live
 @pytest.mark.asyncio
-async def test_live_e2e_register_activate_with_real_defi_tx(live_client):
+async def test_live_e2e_register_activate_then_deploy(live_client, monkeypatch):
+    """Activate saves setup; deploy/prepare returns Aave calldata when funded."""
     reg = await live_client.post(
         "/api/auth/register",
         json={"did_token": "test-did-token", "ua_address": UA, "sra_address": UA},
     )
     assert reg.status_code == 200
 
-    with patch.object(AxisAgent, "run", _run_with_real_defi):
-        activate = await live_client.post(
-            "/api/agent/activate",
-            headers=AUTH,
-            json={
-                "user_id": "test-user",
-                "budget_usdc": 50,
-                "risk_level": "moderate",
-                "goal": "maximize yield",
-                "ua_address": UA,
-                "sra_address": UA,
-            },
-        )
-
+    activate = await live_client.post(
+        "/api/agent/activate",
+        headers=AUTH,
+        json={
+            "user_id": "test-user",
+            "budget_usdc": 50,
+            "risk_level": "moderate",
+            "goal": "Maximize yield",
+            "ua_address": UA,
+            "sra_address": UA,
+        },
+    )
     assert activate.status_code == 200, activate.text
-    body = activate.json()
-    assert body["status"] == "activated"
-    actions = body.get("actions") or []
-    tx_action = next((a for a in actions if a.get("result", {}).get("tx_hash")), None)
-    assert tx_action is not None, actions
-    assert str(tx_action["result"]["tx_hash"]).startswith("0x")
+    assert activate.json()["status"] == "activated"
 
-    status = await live_client.get("/api/agent/status/test-user", headers=AUTH)
-    assert status.status_code == 200
+    monkeypatch.setattr("routes.agent.require_usdc_funding", lambda *_a, **_k: 50.0)
+
+    deploy = await live_client.post(
+        "/api/agent/deploy/prepare",
+        headers=AUTH,
+        json={
+            "user_id": "test-user",
+            "budget_usdc": 50,
+            "risk_level": "moderate",
+            "goal": "Maximize yield",
+            "ua_address": UA,
+            "sra_address": UA,
+        },
+    )
+    assert deploy.status_code == 200, deploy.text
+    body = deploy.json()
+    assert body["status"] == "pending_signatures"
+    assert body.get("plan")
+    assert len(body.get("transactions") or []) >= 2
+    assert all(t.get("data", "").startswith("0x") for t in body["transactions"])
