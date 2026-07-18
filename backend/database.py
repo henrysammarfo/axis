@@ -1,5 +1,6 @@
 """SQLAlchemy async database session management."""
 
+import ssl
 from collections.abc import AsyncGenerator
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -29,14 +30,25 @@ def _async_url(url: str) -> str:
     if url.startswith("postgresql+asyncpg://"):
         parts = urlsplit(url)
         kept = [(k, v) for k, v in parse_qsl(parts.query) if k.lower() not in _ASYNCPG_INCOMPATIBLE_PARAMS]
+        # Disable SQLAlchemy's prepared-statement cache so the Supabase/pgBouncer
+        # transaction pooler (port 6543) works — it can't reuse prepared statements.
+        if not any(k.lower() == "prepared_statement_cache_size" for k, _ in kept):
+            kept.append(("prepared_statement_cache_size", "0"))
         url = urlunsplit(parts._replace(query=urlencode(kept)))
     return url
 
 
 def _connect_args(url: str) -> dict[str, Any]:
-    # Managed Postgres requires TLS; asyncpg enables it via ssl=True (not a URL param).
+    # Managed Postgres (Supabase pooler) requires TLS. We encrypt but skip strict
+    # cert verification — equivalent to libpq `sslmode=require` — which is what the
+    # Supabase transaction pooler expects and avoids CA-bundle drift across
+    # environments (Vercel's runtime vs. Supavisor's cert chain).
+    # statement_cache_size=0 keeps transaction-mode pooling (pgBouncer) compatible.
     if url.startswith(("postgresql://", "postgres://", "postgresql+asyncpg://")):
-        return {"ssl": True}
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        return {"ssl": ssl_ctx, "statement_cache_size": 0}
     return {}
 
 
