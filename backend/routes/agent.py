@@ -13,13 +13,11 @@ from database import get_db
 from dependencies import require_auth, require_own_user
 from rate_limit import limiter
 from services.aave_transactions import (
-    FundingError,
     build_activation_transactions,
     build_rebalance_calls,
     build_supply_calls,
     get_native_balance_wei,
     get_token_balance_usdc,
-    require_usdc_funding,
     verify_tx_success,
 )
 from services.ai_agent import AxisAgent
@@ -633,17 +631,31 @@ async def prepare_deploy(
     )
 
     try:
-        require_usdc_funding(request_body.ua_address, request_body.budget_usdc)
-    except FundingError as exc:
-        raise HTTPException(status_code=402, detail=str(exc)) from exc
+        idle = float(get_token_balance_usdc(request_body.ua_address, "USDC") or 0.0)
+    except Exception:
+        idle = 0.0
+
+    # Deploy what the user actually funded, capped at their stated budget. The
+    # budget is a target/cap — not a hard gate — so funding $10 (or any amount
+    # from $10 up) just works. Mirrors the LP / GMX / best-route flows.
+    deploy_amount = round(min(idle, float(request_body.budget_usdc)), 2)
+    if deploy_amount < MIN_BUDGET_USDC:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Add at least ${MIN_BUDGET_USDC:.0f} USDC to your AXIS address "
+                f"({request_body.ua_address}) on Arbitrum to begin. "
+                f"You have ${idle:.2f} USDC."
+            ),
+        )
 
     apys = await _live_aave_apys()
     custom_legs = (user.custom_strategy or {}).get("legs") if user else None
     if custom_legs:
         # Power-user custom mix — still bounded by the same on-chain session policy.
-        plan = build_plan_from_custom(custom_legs, request_body.budget_usdc, apys, risk, goal)
+        plan = build_plan_from_custom(custom_legs, deploy_amount, apys, risk, goal)
     else:
-        plan = build_plan(risk, goal, request_body.budget_usdc, apys)
+        plan = build_plan(risk, goal, deploy_amount, apys)
 
     try:
         transactions = build_activation_transactions(

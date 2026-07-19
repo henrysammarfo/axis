@@ -288,8 +288,8 @@ function Dashboard() {
         description: (res.explanation || "Your Aave positions are live.").slice(0, 160),
       });
     } catch (e) {
-      toast.error("Deploy failed", {
-        description: e instanceof Error ? e.message : "Add USDC on Arbitrum, then try again.",
+      toast.error("Nothing to put to work yet", {
+        description: e instanceof Error ? e.message : "Add USDC on Arbitrum, then tap Begin.",
       });
     } finally {
       setDeploying(false);
