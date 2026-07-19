@@ -122,6 +122,13 @@ class MarketRiskConsentRequest(BaseModel):
     consent: bool = True
 
 
+class ProfileUpdateRequest(BaseModel):
+    user_id: str
+    ua_address: str
+    display_name: str | None = None
+    avatar: str | None = None
+
+
 class LpPrepareRequest(BaseModel):
     user_id: str
     ua_address: str
@@ -931,6 +938,41 @@ async def set_market_risk_consent(
         consent=request_body.consent,
     )
     return {"status": "ok", "market_risk_consent": bool(request_body.consent)}
+
+
+# Cap avatar payload so an uploaded data URL can't bloat the row (a 256px JPEG
+# data URL is ~30-50KB; anything much bigger is rejected).
+_MAX_AVATAR_LEN = 300_000
+
+
+@router.post("/profile")
+@limiter.limit("20/minute")
+async def update_profile(
+    request_body: ProfileUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: str = Depends(require_auth),
+):
+    """Persist display name + avatar so they sync across a user's devices."""
+    assert_same_user(auth_user_id, request_body.user_id)
+    if request_body.avatar and len(request_body.avatar) > _MAX_AVATAR_LEN:
+        raise HTTPException(status_code=413, detail="Avatar image is too large.")
+
+    tracker = PortfolioTracker(db)
+    user = await tracker.get_user(request_body.user_id)
+    assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=True)
+
+    saved = await tracker.save_profile(
+        user_id=request_body.user_id,
+        ua_address=request_body.ua_address,
+        display_name=request_body.display_name,
+        avatar=request_body.avatar,
+    )
+    return {
+        "status": "ok",
+        "display_name": saved.display_name,
+        "avatar": saved.avatar,
+    }
 
 
 @router.post("/lp/prepare")

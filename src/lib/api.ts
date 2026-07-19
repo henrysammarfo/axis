@@ -29,6 +29,8 @@ export type AgentStatus = {
   session_approval?: string | null;
   custom_strategy?: import("./strategy").CustomStrategy | null;
   market_risk_consent?: boolean;
+  display_name?: string | null;
+  avatar?: string | null;
   x402_spend?: { total_spent_usdc: number; queries_made: number };
 };
 
@@ -333,6 +335,17 @@ export const axisApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  updateProfile: (body: {
+    user_id: string;
+    ua_address: string;
+    display_name?: string | null;
+    avatar?: string | null;
+  }) =>
+    request<{ status: string; display_name: string | null; avatar: string | null }>(
+      "/api/agent/profile",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   prepareLp: (body: { user_id: string; ua_address: string; usdc_amount?: number }) =>
     request<{

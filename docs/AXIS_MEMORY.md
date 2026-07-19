@@ -7,6 +7,27 @@
 
 ---
 
+## Profiles + AXIS avatars (BUILT — 2026-07-19)
+
+- **Cross-device profile** persisted to Postgres `users` table: new nullable columns
+  `display_name VARCHAR(64)` and `avatar TEXT` (id like `axis-03` or an uploaded
+  data URL). Auto-migrated on startup via `_migrate_user_columns` (no Alembic).
+- **Endpoint:** `POST /api/agent/profile` (auth: DID token + `assert_same_user` +
+  `assert_wallet_belongs_to_user`), avatar payload capped at 300 KB. `display_name`
+  + `avatar` are also returned in `GET /api/agent/status/{user_id}`.
+- **Frontend:** `useProfile(userId)` reads local cache for instant paint, then
+  hydrates from server status (server = source of truth). Profile page saves to
+  local cache first, then `POST /profile` via `useUpdateProfile`.
+- **Avatars = AXIS herself.** Six portrait variations of the "PROMPT" brand model
+  (the landing/merch face), generated from the merch reference, stored as ~10 KB
+  512px WebP in `public/avatars/axis-01..06.webp`. Labels: Studio, Neon, Profile,
+  Hooded, Soft, Lime.
+- **Settings/Logout:** `/settings` (account, addresses, log out) and `/profile`
+  (name + avatar picker + upload) under `_authenticated`; account links gated to
+  in-app routes in `MobileMenu`.
+
+---
+
 ## One-Line Pitch
 
 **AXIS** — AI DeFi portfolio agent. **Set. Forget. Earn.**

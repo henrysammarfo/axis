@@ -149,6 +149,16 @@ export function useSaveCustomStrategy() {
   });
 }
 
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: axisApi.updateProfile,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+    },
+  });
+}
+
 /** One-time: consent + rebuild the session with the Uniswap LP permissions. */
 export function useEnableMarketRiskSession() {
   const qc = useQueryClient();

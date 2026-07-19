@@ -112,5 +112,9 @@ async def init_db() -> None:
                 sync_conn.execute(
                     text(f"ALTER TABLE users ADD COLUMN market_risk_consent BOOLEAN DEFAULT {false_default}")
                 )
+            if "display_name" not in existing:
+                sync_conn.execute(text("ALTER TABLE users ADD COLUMN display_name VARCHAR(64)"))
+            if "avatar" not in existing:
+                sync_conn.execute(text("ALTER TABLE users ADD COLUMN avatar TEXT"))
 
         await conn.run_sync(_migrate_user_columns)

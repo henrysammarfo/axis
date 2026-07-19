@@ -55,6 +55,8 @@ import { toast } from "sonner";
 
 import { truncateAddress } from "../../lib/api";
 import { brandHeadMeta } from "../../lib/seo";
+import { useProfile } from "../../hooks/useProfile";
+import { resolveAvatarSrc } from "../../lib/profile";
 import {
   GOALS,
   RISKS,
@@ -161,6 +163,7 @@ function Dashboard() {
   const { tab, chain, activate, budget: budgetParam, risk, goal } = Route.useSearch();
   const navigate = useNavigate({ from: "/dashboard" });
   const userId = session.userId;
+  const profile = useProfile(userId);
   const { data: axisStatus, isLoading } = useAxisStatus(userId);
   const { data: axisReport } = useAxisReport(userId);
   const { data: historyData } = useAxisHistory(userId);
@@ -552,6 +555,17 @@ function Dashboard() {
               <Wallet {...ICON} />
               {truncateAddress(uaDisplay)}
             </div>
+            <Link
+              to="/profile"
+              aria-label="Your profile"
+              className="h-9 w-9 rounded-full overflow-hidden border border-white/20 hover:border-white/50 transition-colors shrink-0"
+            >
+              <img
+                src={resolveAvatarSrc(profile.avatar)}
+                alt="Profile"
+                className="h-full w-full object-cover"
+              />
+            </Link>
             <button
               aria-label="Open menu"
               aria-expanded={menuOpen}

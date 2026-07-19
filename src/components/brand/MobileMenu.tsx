@@ -1,7 +1,18 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Home, Sparkles, Layers, ShoppingBag, LayoutGrid, FileText } from "lucide-react";
+import {
+  X,
+  Home,
+  Sparkles,
+  Layers,
+  ShoppingBag,
+  LayoutGrid,
+  FileText,
+  User,
+  Settings,
+  LogOut,
+} from "lucide-react";
 
 const EASE = [0.25, 0.1, 0.25, 1] as const;
 
@@ -15,7 +26,35 @@ const LINKS = [
   { to: "/merch", label: "Merch — Soon", icon: ShoppingBag },
 ] as const;
 
+// Account links only show inside the app (authenticated) area. We detect that
+// by route prefix so this component — which also renders on marketing pages —
+// never pulls the wallet/Magic bundle just to draw a menu.
+const ACCOUNT_LINKS = [
+  { to: "/profile", label: "Profile", icon: User },
+  { to: "/settings", label: "Settings", icon: Settings },
+] as const;
+
+const APP_PREFIXES = ["/dashboard", "/profile", "/settings", "/proof"];
+
 export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const inApp = APP_PREFIXES.some((p) => pathname.startsWith(p));
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const onLogout = async () => {
+    setLoggingOut(true);
+    try {
+      const { logout } = await import("../../lib/wallet");
+      await logout();
+    } catch {
+      /* ignore — clearing local session below is the important part */
+    } finally {
+      onClose();
+      navigate({ to: "/" });
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -73,6 +112,34 @@ export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => vo
                 </Link>
               </motion.div>
             ))}
+
+            {inApp && (
+              <div className="mt-6 pt-4 border-t border-white/10">
+                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-2">Account</p>
+                {ACCOUNT_LINKS.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={onClose}
+                    className="group flex items-center gap-4 py-4 border-b border-white/10 min-h-12"
+                    activeProps={{ className: "text-[color:var(--color-lime)]" }}
+                  >
+                    <Icon size={20} strokeWidth={1.75} className="shrink-0" />
+                    <span className="text-2xl tracking-[-0.02em]">{label}</span>
+                  </Link>
+                ))}
+                <button
+                  onClick={onLogout}
+                  disabled={loggingOut}
+                  className="group flex items-center gap-4 py-4 min-h-12 w-full text-left text-white/70 hover:text-red-300 transition-colors disabled:opacity-50"
+                >
+                  <LogOut size={20} strokeWidth={1.75} className="shrink-0" />
+                  <span className="text-2xl tracking-[-0.02em]">
+                    {loggingOut ? "Signing out…" : "Log out"}
+                  </span>
+                </button>
+              </div>
+            )}
           </nav>
           <div className="absolute bottom-6 left-4 right-4 flex justify-between text-[10px] uppercase tracking-widest text-white/40">
             <span>AXIS (R) 2026</span>

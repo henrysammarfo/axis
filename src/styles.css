@@ -82,10 +82,26 @@
   * {
     border-color: var(--color-border);
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-tight);
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
   }
 }
 
@@ -99,10 +115,21 @@
   }
 }
 
+/* Brand family. Kept a calmer default tracking so body copy and small labels
+   read comfortably; large display type sets its own tighter tracking inline
+   (e.g. tracking-[-0.04em]). */
 .font-tight {
   font-family: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
+}
+
+/* Calm surface used by the app pages (Profile, Settings). Softer than the
+   marketing pages: sentence case, relaxed rhythm, quiet borders. */
+.card-calm {
+  background-color: color-mix(in oklab, white 3%, transparent);
+  border: 1px solid color-mix(in oklab, white 10%, transparent);
+  border-radius: 1rem;
 }
 
 .mix-exclusion {

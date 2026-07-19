@@ -33,6 +33,10 @@ class User(Base):
     custom_strategy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # One-time explicit consent for market-risk positions (Uniswap V3 LP).
     market_risk_consent: Mapped[bool] = mapped_column(default=False)
+    # Profile (syncs across devices): display name + avatar. Avatar is either an
+    # AXIS avatar id (e.g. "axis-03") or an uploaded image data URL, so use Text.
+    display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    avatar: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

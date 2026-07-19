@@ -137,6 +137,24 @@ class PortfolioTracker:
         await self.db.flush()
         return user
 
+    async def save_profile(
+        self,
+        user_id: str,
+        ua_address: str,
+        display_name: str | None = None,
+        avatar: str | None = None,
+    ) -> User:
+        """Persist the user's display name + avatar so they sync across devices."""
+        await assert_address_not_claimed(self, ua_address, user_id)
+        user = await self.ensure_user(user_id, ua_address=ua_address)
+        if display_name is not None:
+            trimmed = display_name.strip()
+            user.display_name = trimmed[:64] if trimmed else None
+        if avatar is not None:
+            user.avatar = avatar or None
+        await self.db.flush()
+        return user
+
     async def save_custom_strategy(
         self,
         user_id: str,
@@ -283,4 +301,6 @@ class PortfolioTracker:
             "session_approval": user.session_key_approval if user else None,
             "custom_strategy": user.custom_strategy if user else None,
             "market_risk_consent": bool(user.market_risk_consent) if user else False,
+            "display_name": user.display_name if user else None,
+            "avatar": user.avatar if user else None,
         }
