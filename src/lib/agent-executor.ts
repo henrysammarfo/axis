@@ -100,8 +100,12 @@ export const executeSessionCalls = createServerFn({ method: "POST" })
     const { createPublicClient, http } = await import("viem");
     const { privateKeyToAccount } = await import("viem/accounts");
     const { arbitrum } = await import("viem/chains");
-    const { constants, createKernelAccountClient, createZeroDevPaymasterClient, getUserOperationGasPrice } =
-      await import("@zerodev/sdk");
+    const {
+      constants,
+      createKernelAccountClient,
+      createZeroDevPaymasterClient,
+      getUserOperationGasPrice,
+    } = await import("@zerodev/sdk");
     const { deserializePermissionAccount } = await import("@zerodev/permissions");
     const { toECDSASigner } = await import("@zerodev/permissions/signers");
 

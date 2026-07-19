@@ -24,18 +24,48 @@ const RISKS: (Risk | "All")[] = ["All", "Low", "Med", "High"];
 const RISK_ICON = { Low: Shield, Med: Activity, High: TrendingUp };
 
 const STRATEGIES = [
-  { id: "aave-usdc", name: "Aave USDC Supply", chain: "Arbitrum" as Chain, risk: "Low" as Risk, protocol: "aave", asset: "USDC" },
-  { id: "aave-eth", name: "Aave ETH Supply", chain: "Arbitrum" as Chain, risk: "Low" as Risk, protocol: "aave", asset: "ETH" },
-  { id: "gmx-glp", name: "GMX GM Pools", chain: "Arbitrum" as Chain, risk: "Med" as Risk, protocol: "gmx", asset: "GM" },
+  {
+    id: "aave-usdc",
+    name: "Aave USDC Supply",
+    chain: "Arbitrum" as Chain,
+    risk: "Low" as Risk,
+    protocol: "aave",
+    asset: "USDC",
+  },
+  {
+    id: "aave-eth",
+    name: "Aave ETH Supply",
+    chain: "Arbitrum" as Chain,
+    risk: "Low" as Risk,
+    protocol: "aave",
+    asset: "ETH",
+  },
+  {
+    id: "gmx-glp",
+    name: "GMX GM Pools",
+    chain: "Arbitrum" as Chain,
+    risk: "Med" as Risk,
+    protocol: "gmx",
+    asset: "GM",
+  },
 ] as const;
 
 function VaultPage() {
   const [chain, setChain] = useState<Chain | "All">("All");
   const [risk, setRisk] = useState<Risk | "All">("All");
 
-  const { data: aaveUsdc } = useQuery({ queryKey: ["yield", "aave", "USDC"], queryFn: () => axisApi.yields.aave("USDC") });
-  const { data: aaveEth } = useQuery({ queryKey: ["yield", "aave", "ETH"], queryFn: () => axisApi.yields.aave("ETH") });
-  const { data: gmx } = useQuery({ queryKey: ["yield", "gmx"], queryFn: () => axisApi.yields.gmx() });
+  const { data: aaveUsdc } = useQuery({
+    queryKey: ["yield", "aave", "USDC"],
+    queryFn: () => axisApi.yields.aave("USDC"),
+  });
+  const { data: aaveEth } = useQuery({
+    queryKey: ["yield", "aave", "ETH"],
+    queryFn: () => axisApi.yields.aave("ETH"),
+  });
+  const { data: gmx } = useQuery({
+    queryKey: ["yield", "gmx"],
+    queryFn: () => axisApi.yields.gmx(),
+  });
 
   const apyMap: Record<string, number> = {
     "aave-usdc": Number(aaveUsdc?.supply_apy ?? 0),

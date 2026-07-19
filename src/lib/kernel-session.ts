@@ -140,11 +140,11 @@ export async function buildSessionApproval(params: {
     await import("viem");
   const { arbitrum } = await import("viem/chains");
   const { constants, createKernelAccount } = await import("@zerodev/sdk");
-  const { toPermissionValidator, serializePermissionAccount } = await import("@zerodev/permissions");
+  const { toPermissionValidator, serializePermissionAccount } =
+    await import("@zerodev/permissions");
   const { toEmptyECDSASigner } = await import("@zerodev/permissions/signers");
-  const { toCallPolicy, CallPolicyVersion, toRateLimitPolicy, ParamCondition } = await import(
-    "@zerodev/permissions/policies"
-  );
+  const { toCallPolicy, CallPolicyVersion, toRateLimitPolicy, ParamCondition } =
+    await import("@zerodev/permissions/policies");
 
   const owner = getAddress(ownerAddress);
   const rpcUrl = import.meta.env.VITE_ARBITRUM_RPC_URL?.toString().trim();
@@ -358,7 +358,10 @@ export async function buildSessionApproval(params: {
     entryPoint,
     kernelVersion: KERNEL_V3_3,
     // 7702: the EOA itself is the account; owner (Magic) is the root signer.
-    eip7702Account: magicProvider,
+    // Magic exposes an EIP-1193 provider that ZeroDev consumes as the 7702 root
+    // signer at runtime; its declared type is a viem Signer, so cast here.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    eip7702Account: magicProvider as any,
     address: owner,
     plugins: {
       regular: permissionPlugin,

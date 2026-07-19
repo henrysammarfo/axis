@@ -84,7 +84,11 @@ function Proof() {
           {checks.map((c) => (
             <li key={c.label} className="flex items-center justify-between text-sm gap-4">
               <span>{c.label}</span>
-              <span className={c.ok ? "text-[color:var(--color-lime)] shrink-0" : "text-white/30 shrink-0"}>
+              <span
+                className={
+                  c.ok ? "text-[color:var(--color-lime)] shrink-0" : "text-white/30 shrink-0"
+                }
+              >
                 {c.ok ? "✓ Ready" : "○ Missing"}
               </span>
             </li>

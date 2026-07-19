@@ -46,15 +46,23 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-black text-white px-4 font-tight">
       <div className="max-w-md text-center">
         <h1 className="text-2xl uppercase tracking-[-0.04em]">System interrupted</h1>
-        <p className="mt-2 text-sm text-white/60">The agent hit an exception. Try again or return home.</p>
+        <p className="mt-2 text-sm text-white/60">
+          The agent hit an exception. Try again or return home.
+        </p>
         <div className="mt-6 flex gap-2 justify-center">
           <button
-            onClick={() => { router.invalidate(); reset(); }}
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
             className="rounded-full bg-white text-black px-5 py-2 text-xs uppercase tracking-widest"
           >
             Retry
           </button>
-          <a href="/" className="rounded-full border border-white/40 px-5 py-2 text-xs uppercase tracking-widest">
+          <a
+            href="/"
+            className="rounded-full border border-white/40 px-5 py-2 text-xs uppercase tracking-widest"
+          >
             Home
           </a>
         </div>

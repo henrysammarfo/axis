@@ -4,15 +4,13 @@
  * Install a minimal browser polyfill before any wallet SDK loads.
  */
 export function ensureProcessPolyfill(): void {
-  const g = globalThis as typeof globalThis & {
+  // Cast through `unknown` so we don't intersect with Node's full `Process`
+  // type (from @types/node) — we only need a minimal shape here.
+  const g = globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
   };
-  if (!g.process) {
-    g.process = { env: {} };
-  } else if (!g.process.env) {
-    g.process.env = {};
-  }
-  const env = g.process.env;
+  const proc = (g.process ??= {});
+  const env = (proc.env ??= {});
   if (!env.NODE_ENV) {
     env.NODE_ENV = import.meta.env.PROD ? "production" : "development";
   }

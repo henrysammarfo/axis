@@ -113,8 +113,8 @@ function ProfilePage() {
         <div>
           <h1 className="text-3xl sm:text-4xl tracking-[-0.03em]">Your profile</h1>
           <p className="mt-2 text-white/55 text-[15px] leading-relaxed">
-            A calm little corner that's yours. Pick a name and an AXIS avatar — this is just for you,
-            it stays on this device.
+            A calm little corner that's yours. Pick a name and an AXIS avatar — this is just for
+            you, it stays on this device.
           </p>
         </div>
 
@@ -127,7 +127,9 @@ function ProfilePage() {
           />
           <div className="min-w-0">
             <p className="text-xl tracking-[-0.02em] truncate">{name.trim() || "AXIS user"}</p>
-            <p className="text-sm text-white/45 truncate">{session.email ?? "Signed in with Google"}</p>
+            <p className="text-sm text-white/45 truncate">
+              {session.email ?? "Signed in with Google"}
+            </p>
           </div>
         </section>
 
@@ -153,7 +155,9 @@ function ProfilePage() {
         <section className="space-y-4">
           <div>
             <h2 className="text-lg tracking-[-0.02em]">Choose an avatar</h2>
-            <p className="text-sm text-white/45 mt-1">Six AXIS marks — quiet, geometric, on brand.</p>
+            <p className="text-sm text-white/45 mt-1">
+              Six AXIS marks — quiet, geometric, on brand.
+            </p>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {AXIS_AVATARS.map((a) => {

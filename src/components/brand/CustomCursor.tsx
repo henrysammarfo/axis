@@ -20,12 +20,22 @@ export function CustomCursor() {
     <div
       ref={ref}
       className="hidden lg:block pointer-events-none fixed z-50"
-      style={{ transform: "translate(-50%, -50%)", mixBlendMode: "exclusion", left: -100, top: -100 }}
+      style={{
+        transform: "translate(-50%, -50%)",
+        mixBlendMode: "exclusion",
+        left: -100,
+        top: -100,
+      }}
       aria-hidden
     >
       <svg width="48" height="48" viewBox="0 0 48 48">
         <circle cx="24" cy="24" r="22.75" fill="none" stroke="#fff" strokeWidth="2.5" />
-        <path d="M24 12 L24 36 M16 20 L32 20 M18 28 L30 28" stroke="#fff" strokeWidth="2" fill="none" />
+        <path
+          d="M24 12 L24 36 M16 20 L32 20 M18 28 L30 28"
+          stroke="#fff"
+          strokeWidth="2"
+          fill="none"
+        />
       </svg>
     </div>
   );

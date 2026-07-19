@@ -105,7 +105,9 @@ export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => vo
                   activeProps={{ className: "text-[color:var(--color-lime)]" }}
                 >
                   <Icon size={22} strokeWidth={1.75} className="shrink-0" />
-                  <span className="text-3xl sm:text-5xl uppercase tracking-[-0.04em] truncate">{label}</span>
+                  <span className="text-3xl sm:text-5xl uppercase tracking-[-0.04em] truncate">
+                    {label}
+                  </span>
                   <span className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">
                     {String(i + 1).padStart(2, "0")}
                   </span>

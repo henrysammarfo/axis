@@ -152,11 +152,10 @@ function Index() {
         transition={{ duration: 0.6, ease: EASE, delay: 0.3 }}
       >
         <div className="lg:pl-4 lg:pt-[126px] lg:max-w-[692px]">
-          AXIS is an autonomous DeFi agent. Sign in with Google, set a budget, name a
-          goal — AXIS routes capital across Arbitrum, Base, Optimism and Ethereum as
-          one balance. No seed phrases, no gas modals, no chain switching. Move your
-          cursor: every strategy triggers the same way — a small signal, a decisive
-          execution.
+          AXIS is an autonomous DeFi agent. Sign in with Google, set a budget, name a goal — AXIS
+          routes capital across Arbitrum, Base, Optimism and Ethereum as one balance. No seed
+          phrases, no gas modals, no chain switching. Move your cursor: every strategy triggers the
+          same way — a small signal, a decisive execution.
         </div>
       </motion.div>
 
@@ -227,12 +226,7 @@ function Index() {
           <ScatteredGrid
             items={IMAGES.length}
             render={(i) => (
-              <img
-                src={IMAGES[i]}
-                alt=""
-                loading="lazy"
-                className="w-full h-full object-cover"
-              />
+              <img src={IMAGES[i]} alt="" loading="lazy" className="w-full h-full object-cover" />
             )}
           />
           <div className="h-[40vh]" />

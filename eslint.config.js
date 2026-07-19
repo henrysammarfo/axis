@@ -6,7 +6,21 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    // Never lint build output or generated files. Without .vercel/.nitro here,
+    // the Prettier rule tries to format huge minified bundles and effectively
+    // hangs the whole `eslint .` run.
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      ".vercel",
+      ".nitro",
+      ".tanstack",
+      "node_modules",
+      "src/routeTree.gen.ts",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

@@ -72,16 +72,10 @@ export function useAxisHistory(userId: string | undefined) {
   });
 }
 
-export function useStrategyPreview(
-  budget: number,
-  risk: string,
-  goal: string,
-  enabled: boolean,
-) {
+export function useStrategyPreview(budget: number, risk: string, goal: string, enabled: boolean) {
   return useQuery({
     queryKey: ["axis", "strategy-preview", budget, risk, goal],
-    queryFn: () =>
-      axisApi.previewStrategy({ budget_usdc: budget, risk_level: risk, goal }),
+    queryFn: () => axisApi.previewStrategy({ budget_usdc: budget, risk_level: risk, goal }),
     enabled,
     staleTime: 30_000,
   });

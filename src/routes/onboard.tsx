@@ -36,11 +36,12 @@ export const Route = createFileRoute("/onboard")({
       throw redirect({ to: "/dashboard" });
     }
   },
-  head: () => brandHeadMeta({
-    title: "Get Started — AXIS",
-    description: "Sign in with Google and activate your autonomous DeFi agent.",
-    path: "/onboard",
-  }),
+  head: () =>
+    brandHeadMeta({
+      title: "Get Started — AXIS",
+      description: "Sign in with Google and activate your autonomous DeFi agent.",
+      path: "/onboard",
+    }),
   component: Onboard,
 });
 
@@ -150,8 +151,8 @@ function Onboard() {
               <div>
                 <h1 className="text-4xl tracking-[-0.04em]">Welcome to AXIS</h1>
                 <p className="mt-3 text-white/60 text-sm leading-relaxed">
-                  Sign in with Google. Your wallet is created and upgraded automatically —
-                  no seed phrase, no MetaMask, no gas for you to fund.
+                  Sign in with Google. Your wallet is created and upgraded automatically — no seed
+                  phrase, no MetaMask, no gas for you to fund.
                 </p>
               </div>
 
@@ -164,9 +165,10 @@ function Onboard() {
 
               {configError && (
                 <div className="border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-300/90">
-                  Backend unreachable at {import.meta.env.VITE_API_URL ?? "http://localhost:8000"}.
-                  {" "}
-                  {configLoadError instanceof Error ? configLoadError.message : "Start the backend server."}
+                  Backend unreachable at {import.meta.env.VITE_API_URL ?? "http://localhost:8000"}.{" "}
+                  {configLoadError instanceof Error
+                    ? configLoadError.message
+                    : "Start the backend server."}
                 </div>
               )}
 
@@ -184,8 +186,8 @@ function Onboard() {
                   <p className="text-red-300 text-sm leading-relaxed">{error}</p>
                   {/sponsor|refill|agent_wallet/i.test(error) && (
                     <p className="text-xs text-white/45 leading-relaxed">
-                      Ops note: top up <code className="text-white/60">AGENT_WALLET</code> with ETH on
-                      Arbitrum One. Users never fund their Magic wallet for EIP-7702.
+                      Ops note: top up <code className="text-white/60">AGENT_WALLET</code> with ETH
+                      on Arbitrum One. Users never fund their Magic wallet for EIP-7702.
                     </p>
                   )}
                 </div>

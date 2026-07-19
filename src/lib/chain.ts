@@ -23,7 +23,5 @@ export function chainDisplayName(): string {
 
 /** Arbiscan explorer base for the configured chain. */
 export function arbiscanBaseUrl(): string {
-  return isArbitrumSepolia()
-    ? "https://sepolia.arbiscan.io"
-    : "https://arbiscan.io";
+  return isArbitrumSepolia() ? "https://sepolia.arbiscan.io" : "https://arbiscan.io";
 }

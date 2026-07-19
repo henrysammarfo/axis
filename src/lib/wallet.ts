@@ -72,10 +72,7 @@ function getMagic(): AxisMagic {
     const rpcUrl = requireEnv("VITE_ARBITRUM_RPC_URL");
     const chainId = arbitrumChainId();
     magicSingleton = new Magic(magicKey, {
-      extensions: [
-        new OAuthExtension(),
-        new EVMExtension([{ rpcUrl, chainId, default: true }]),
-      ],
+      extensions: [new OAuthExtension(), new EVMExtension([{ rpcUrl, chainId, default: true }])],
     }) as AxisMagic;
   }
   return magicSingleton;
@@ -92,10 +89,7 @@ function setMemorySession(session: WalletSession | null): void {
 function formatWalletError(error: unknown, fallback: string, _fundAddress?: string): Error {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
-  if (
-    lower.includes("sponsor wallet needs a refill") ||
-    lower.includes("agent_wallet")
-  ) {
+  if (lower.includes("sponsor wallet needs a refill") || lower.includes("agent_wallet")) {
     return new Error(message);
   }
   if (
@@ -147,7 +141,6 @@ function normalize7702Authorization(
   };
 }
 
-
 /** True when Google redirected back with an OAuth authorization response. */
 export function isOAuthCallback(): boolean {
   if (!isBrowser()) return false;
@@ -169,20 +162,12 @@ function isBenignOAuthError(error: unknown): boolean {
   );
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  label: string,
-): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(
       () =>
-        reject(
-          new Error(
-            `${label} timed out. Disable wallet browser extensions and try again.`,
-          ),
-        ),
+        reject(new Error(`${label} timed out. Disable wallet browser extensions and try again.`)),
       ms,
     );
   });
@@ -231,8 +216,7 @@ export function magicOAuthRedirectURI(): string {
 
 /** Start Google OAuth — redirects away from the app, or returns session if already signed in. */
 export type GoogleLoginResult =
-  | { status: "session"; session: WalletSession }
-  | { status: "redirecting" };
+  { status: "session"; session: WalletSession } | { status: "redirecting" };
 
 export async function loginWithGoogle(): Promise<GoogleLoginResult> {
   if (!isBrowser()) {
@@ -394,24 +378,18 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
     const provisioned = await ensureKernelDelegation(magic, ethAddress, didToken);
 
     const uaAddress = provisioned.address;
-    const sraAddress =
-      auth.sra_address ??
-      (await createSmartRoutingAddress(uaAddress));
+    const sraAddress = auth.sra_address ?? (await createSmartRoutingAddress(uaAddress));
 
     if (isArbitrumOne() && !sraAddress) {
-      throw new Error("ZeroDev Smart Routing Address creation failed. Check ZeroDev project mainnet config.");
+      throw new Error(
+        "ZeroDev Smart Routing Address creation failed. Check ZeroDev project mainnet config.",
+      );
     }
 
-    auth = await axisApi.register(
-      didToken,
-      uaAddress,
-      sraAddress,
-      info.email ?? undefined,
-      {
-        eip7702TxHash: provisioned.eip7702TxHash ?? auth.eip7702_tx_hash,
-        eip7702Delegated: provisioned.eip7702Delegated,
-      },
-    );
+    auth = await axisApi.register(didToken, uaAddress, sraAddress, info.email ?? undefined, {
+      eip7702TxHash: provisioned.eip7702TxHash ?? auth.eip7702_tx_hash,
+      eip7702Delegated: provisioned.eip7702Delegated,
+    });
   }
 
   if (!auth.ua_address) {
@@ -587,9 +565,11 @@ async function createSmartRoutingAddress(owner: string): Promise<string | undefi
   }
 
   try {
-    const { createSmartRoutingAddress: createSra, createCall, FLEX } = await import(
-      "@zerodev/smart-routing-address"
-    );
+    const {
+      createSmartRoutingAddress: createSra,
+      createCall,
+      FLEX,
+    } = await import("@zerodev/smart-routing-address");
     const { arbitrum, base, optimism, mainnet } = await import("viem/chains");
     const { erc20Abi } = await import("viem");
 
@@ -656,9 +636,7 @@ export type UnsignedActivationTx = {
 };
 
 /** Sign+broadcast each Aave activation tx via Magic (user pays gas or ZeroDev if configured). */
-export async function signActivationTransactions(
-  transactions: UnsignedActivationTx[],
-): Promise<
+export async function signActivationTransactions(transactions: UnsignedActivationTx[]): Promise<
   Array<{
     purpose: string;
     tx_hash: string;
@@ -807,7 +785,11 @@ export async function deployStrategy(body: {
   sra_address?: string;
 }): Promise<{ status: string; explanation: string; message?: string }> {
   const prepared = await axisApi.prepareDeploy(body);
-  if (prepared.status !== "pending_signatures" || !prepared.plan || !prepared.transactions?.length) {
+  if (
+    prepared.status !== "pending_signatures" ||
+    !prepared.plan ||
+    !prepared.transactions?.length
+  ) {
     throw new Error(
       prepared.message || "Could not prepare deposits. Check your USDC balance on Arbitrum.",
     );
@@ -815,12 +797,8 @@ export async function deployStrategy(body: {
 
   const approval = await ensureSessionApproval(body.user_id, body.ua_address).catch(() => null);
 
-  const sessionTxs = prepared.transactions.filter((t) =>
-    SESSION_SUPPORTED_PURPOSES.has(t.purpose),
-  );
-  const clientTxs = prepared.transactions.filter(
-    (t) => !SESSION_SUPPORTED_PURPOSES.has(t.purpose),
-  );
+  const sessionTxs = prepared.transactions.filter((t) => SESSION_SUPPORTED_PURPOSES.has(t.purpose));
+  const clientTxs = prepared.transactions.filter((t) => !SESSION_SUPPORTED_PURPOSES.has(t.purpose));
 
   const signed_txs: SignedTx[] = [];
   const didToken = getStoredSession()?.didToken;
@@ -1055,7 +1033,9 @@ export async function depositGmxViaSession(body: {
     },
   });
   if (!result.success || !result.tx_hash) {
-    throw new Error("AXIS could not add to GMX. Make sure you have a little ETH for the keeper fee.");
+    throw new Error(
+      "AXIS could not add to GMX. Make sure you have a little ETH for the keeper fee.",
+    );
   }
 
   const confirmed = await axisApi.confirmGmxDeposit({
@@ -1133,7 +1113,11 @@ export async function applyRouteViaSession(body: {
           estimated_apy: group.estimated_apy,
         });
       } else {
-        skipped.push({ venue: group.venue, amount_usdc: group.amount_usdc, reason: "not confirmed" });
+        skipped.push({
+          venue: group.venue,
+          amount_usdc: group.amount_usdc,
+          reason: "not confirmed",
+        });
       }
     } catch (err) {
       skipped.push({
@@ -1188,7 +1172,9 @@ export async function withdrawGmxViaSession(body: {
     },
   });
   if (!result.success || !result.tx_hash) {
-    throw new Error("AXIS could not close GMX. Make sure you have a little ETH for the keeper fee.");
+    throw new Error(
+      "AXIS could not close GMX. Make sure you have a little ETH for the keeper fee.",
+    );
   }
 
   const confirmed = await axisApi.confirmGmxWithdraw({

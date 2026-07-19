@@ -211,11 +211,7 @@ export const axisApi = {
       }),
     }),
 
-  sponsorEip7702: (
-    didToken: string,
-    authority: string,
-    authorization: Record<string, unknown>,
-  ) =>
+  sponsorEip7702: (didToken: string, authority: string, authorization: Record<string, unknown>) =>
     request<{
       tx_hash: string;
       delegated: boolean;
