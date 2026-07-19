@@ -36,15 +36,17 @@ AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial
 - **Google sign-in → embedded wallet.** [Magic](https://magic.link) creates a non-custodial EOA from a Google login. No seed phrase, no extension.
 - **Pick a risk level + goal.** Conservative / Moderate / Aggressive × Protect / Grow / Maximize. A deterministic 3×3 matrix produces a real allocation across Aave v3 stablecoin markets (USDC/USDT). Live APYs come from on-chain / Aave data, not hardcoded numbers.
 - **Deposit USDC, tap "Begin".** AXIS supplies to Aave on Arbitrum. Every action is a real, verifiable Arbiscan transaction.
-- **Hands-off from then on.** With one owner signature, the user grants AXIS a **policy-bounded session key**. AXIS can then supply/withdraw **only the user's own USDC to/from Aave, on the user's own behalf** — gaslessly, with zero further prompts.
-- **Power users** can define a custom USDC/USDT split, still inside the same safety envelope.
+- **Best-yield router + one-tap apply.** AXIS scans live APYs across every venue (Aave USDC/USDT, the Uniswap V3 USDC/USDT stable LP, and the GMX V2 GM pool) and builds **one** risk-adjusted allocation. **"Apply best route"** executes the whole plan in a single tap — each venue as its own gasless UserOp, **no signing** — and skips any leg it can't fund, then shows a "what AXIS did" summary.
+- **Balance-aware.** The router reads what the account actually holds (USDC / USDT / ETH). GMX needs a little of the user's own ETH for its keeper fee, so if that's missing AXIS pre-skips GMX and folds the money into the stable core instead of failing.
+- **Hands-off from then on.** With one owner signature, the user grants AXIS a **policy-bounded session key**. Every venue action (Aave supply/withdraw, LP open/close, GMX add/close) runs gaslessly with zero further prompts, and funds can only ever move to the user's own account.
+- **Power users** can define a custom USDC/USDT split *and* toggle individual market venues (e.g. turn GMX off) for the auto-route — always inside the same safety envelope.
 - **Plain-English reporting.** An AI layer (Venice primary, OpenAI fallback) *explains* what the deterministic engine did — it never decides allocations.
 
 ## Why it's safe (security model)
 
 The core guarantee: **even if AXIS's agent key is fully compromised, no attacker can steal user funds.**
 
-This is enforced **on-chain**, not by trust. When a user turns on hands-off mode, they sign a ZeroDev [Kernel v3.3](https://docs.zerodev.app) **session key** bounded by a `CallPolicy` (`src/lib/kernel-session.ts`) that only permits three calls:
+This is enforced **on-chain**, not by trust. When a user turns on hands-off mode, they sign a ZeroDev [Kernel v3.3](https://docs.zerodev.app) **session key** bounded by a `CallPolicy` (`src/lib/kernel-session.ts`). The **base policy** (always on) permits only:
 
 | Allowed call | Hard constraints baked into the signed policy |
 |---|---|
@@ -52,7 +54,14 @@ This is enforced **on-chain**, not by trust. When a user turns on hands-off mode
 | `AavePool.supply(asset, amount, onBehalfOf, ref)` | `asset` **must equal** USDC · `onBehalfOf` **must equal** the owner |
 | `AavePool.withdraw(asset, amount, to)` | `asset` **must equal** USDC · `to` **must equal** the owner |
 
-Plus a **rate-limit policy** (max 100 ops/day). Any other call — a transfer, a different token, a different recipient — is rejected by the smart account itself. Withdrawals can *only* go back to the owner. Funds are structurally trapped inside the user's own account.
+Aggressive users who give a **one-time market-risk consent** unlock two extra venues, still fully pinned:
+
+| Extra allowed calls (market-risk) | Hard constraints |
+|---|---|
+| Uniswap V3: `approve` → SwapRouter/NPM, `exactInputSingle`, `mint`, `decreaseLiquidity`/`collect`/`burn` | USDC/USDT only · **recipient = owner** on swap + mint · full-range USDC/USDT stable pair |
+| GMX V2: `approve` → Router, `sendWnt`, `sendTokens`, `createDeposit`/`createWithdrawal` | **receiver = owner** and **market = the vetted GM pool** pinned at fixed calldata offsets · `sendWnt` value capped (~0.01 ETH) so a leaked key can't drain ETH |
+
+Plus a **rate-limit policy** (max 100 ops/day). Any other call — a transfer, a different token, a different recipient — is rejected by the smart account itself. Withdrawals/positions can *only* settle back to the owner. Funds are structurally trapped inside the user's own account, on every venue.
 
 Additional layers:
 
@@ -71,13 +80,14 @@ flowchart LR
   U[User] -->|Google login| M[Magic embedded wallet]
   M -->|EIP-7702 delegate| K[ZeroDev Kernel v3.3 account]
   U -->|risk + goal + budget| FE[TanStack Start frontend]
-  FE -->|/agent/strategy/preview| API[FastAPI backend]
-  API -->|3x3 matrix + live APYs| PLAN[Locked allocation plan]
-  U -->|Deposit USDC + Begin| K
-  K -->|supply USDC| AAVE[(Aave v3 · Arbitrum One)]
-  U -->|one signature| SK[Policy-bounded session key]
+  FE -->|/agent/route/preview| API[FastAPI backend]
+  API -->|live APYs + balances| RT[Best-yield router · risk-adjusted plan]
+  U -->|Deposit USDC + Apply best route| SK[Policy-bounded session key]
+  U -->|one signature| SK
   SK -.gasless UserOps.-> PM[ZeroDev paymaster/bundler]
-  PM --> AAVE
+  PM --> AAVE[(Aave v3 · USDC)]
+  PM --> LP[(Uniswap V3 · USDC/USDT LP)]
+  PM --> GMX[(GMX V2 · GM ETH/USD)]
 ```
 
 ## Tech stack
@@ -90,7 +100,8 @@ flowchart LR
 | Auth / wallet | Magic Labs (Google OAuth + embedded EOA) |
 | Smart accounts | ZeroDev Kernel v3.3, EIP-7702, session keys + `CallPolicy` |
 | Gas | ZeroDev v3 bundler + paymaster (sponsored / gasless) |
-| DeFi | Aave v3 (USDC/USDT supply) on Arbitrum One; Uniswap V3 for USDC→USDT |
+| DeFi | Aave v3 (USDC/USDT supply), Uniswap V3 USDC/USDT stable LP, GMX V2 GM ETH/USD pool — all on Arbitrum One |
+| Persistence | PostgreSQL (Supabase, async SQLAlchemy + asyncpg) |
 | AI | Venice (primary) + OpenAI (fallback) — explanation only |
 | Web intelligence | TinyFish + x402 micropayments |
 | Chain access | Alchemy dedicated Arbitrum One RPC |
@@ -120,8 +131,11 @@ axis/
 │       ├── auth_service.py     # Magic DID verification
 │       ├── tenant_guard.py     # Per-user isolation
 │       ├── strategy_engine.py  # Deterministic 3x3 matrix + custom validation
-│       ├── aave_transactions.py# Aave/Uniswap calldata, funding + tx checks
-│       ├── portfolio_tracker.py# Persistence
+│       ├── yield_router.py     # Best-yield router (scan venues → one plan)
+│       ├── aave_transactions.py# Aave calldata, USDC/USDT/ETH balances, tx checks
+│       ├── uniswap_lp.py       # USDC/USDT stable LP enter/exit calldata
+│       ├── gmx_gm.py           # GMX V2 GM deposit/withdraw session calls
+│       ├── portfolio_tracker.py# Persistence (Postgres)
 │       └── ...                 # ai_agent, x402_client, yield_fetcher, eip7702_sponsor
 └── docs/                       # ARCHITECTURE, PRODUCTION_AUDIT, memory, keys
 ```
@@ -143,12 +157,22 @@ Allocations are **deterministic**, defined in `backend/services/strategy_engine.
 - Dust legs (< $0.50) fold into the largest leg so tiny deposits still produce one clean position.
 - Custom strategies are validated (`validate_custom_legs`): only `aave`, only USDC/USDT, ≤ 4 legs, weights must sum to 100%.
 
+### Best-yield router (`backend/services/yield_router.py`)
+
+On top of the matrix, AXIS runs a **deterministic best-yield router**. It fetches live APYs across Aave USDC/USDT, the Uniswap V3 USDC/USDT stable LP, and the GMX V2 GM ETH/USD pool concurrently, then builds **one** risk-adjusted `RoutePlan`:
+
+- **Stable core → Aave USDC**, the only gasless-supply path (Aave USDT APY is shown for comparison but never allocated, since USDT-supply isn't in the session policy).
+- **Market sleeve (Uniswap LP + GMX)** only for **Aggressive + market-risk consent**; GMX exposure is sub-capped. Below-minimum sleeves **fold back** into the stable core so even a **$10** deposit fully deploys and nothing dust-fails on-chain.
+- **Balance-aware:** reads real USDC/USDT/ETH. If the account lacks the ETH GMX needs for its keeper fee, GMX is **pre-skipped** (its share folds into the core), surfaced with an "add ETH to include it" hint.
+- **Power-user toggles:** `exclude_venues` lets a user turn GMX/LP off; excluded venues fold back to the stable core.
+- **One-tap apply:** `POST /agent/route/apply/prepare` returns the session calls grouped per venue; the frontend runs each as its own gasless UserOp with **graceful skip**, then `POST /agent/route/apply/confirm` verifies on-chain and logs only what executed.
+
 ## Hands-off mode (gasless session keys)
 
 1. Frontend fetches the agent's session-signer address (`getSessionSignerAddress` server fn).
-2. `buildSessionApproval` builds a `CallPolicy`-bounded Kernel account and asks the owner for **one** Magic signature.
+2. `buildSessionApproval` builds a `CallPolicy`-bounded Kernel account and asks the owner for **one** Magic signature. Aggressive users can include the market-risk venues (LP + GMX) in the same approval.
 3. The serialized approval is stored server-side via `POST /api/agent/session/enable`.
-4. To act, the backend builds **policy-safe, USDC-only** calls (`build_rebalance_calls`); the Node executor loads the owner's approval (after re-verifying their token) and submits a **gasless** UserOp through the ZeroDev paymaster.
+4. To act, the backend builds **policy-safe, owner-pinned** calls (`build_rebalance_calls`, `build_supply_calls`, `build_lp_enter_calls`/`exit`, `build_gm_deposit_calls`/`withdraw`); the Node executor loads the owner's approval (after re-verifying their token) and submits **gasless** UserOps through the ZeroDev paymaster. GMX's native ETH keeper fee is the one cost drawn from the user's own ETH (never sponsored).
 5. Result is verified on-chain and logged.
 
 ## API reference
@@ -171,11 +195,20 @@ Base URL: `https://axis-api-beta.vercel.app`. Mutating routes require `Authoriza
 | `POST` | `/api/agent/rebalance/prepare` | ✅ | Build USDC-only rebalance calls |
 | `POST` | `/api/agent/rebalance/confirm` | ✅ | Verify + log session rebalance |
 | `POST` | `/api/agent/strategy/custom` | ✅ | Validate + save custom strategy |
+| `POST` | `/api/agent/route/preview` | ✅ | Best-yield route + balances + fundability |
+| `POST` | `/api/agent/route/apply/prepare` | ✅ | Grouped session calls for the whole route |
+| `POST` | `/api/agent/route/apply/confirm` | ✅ | Verify + log each executed route leg |
+| `POST` | `/api/agent/consent/market-risk` | ✅ | One-time consent to unlock LP + GMX |
+| `POST` | `/api/agent/lp/prepare` · `/lp/confirm` | ✅ | Open Uniswap USDC/USDT stable LP |
+| `POST` | `/api/agent/lp/exit/prepare` · `/lp/exit/confirm` | ✅ | Close the stable LP back to owner |
+| `POST` | `/api/agent/gmx/deposit/prepare` · `/deposit/confirm` | ✅ | Add to GMX GM pool (signing-free) |
+| `POST` | `/api/agent/gmx/withdraw/prepare` · `/withdraw/confirm` | ✅ | Redeem the GMX GM position |
 | `GET` | `/api/agent/status/{user_id}` | ✅ (self) | Agent status + x402 spend |
 | `GET` | `/api/agent/report/{user_id}` | ✅ (self) | Weekly plain-English report |
 | `GET` | `/api/portfolio/positions/{user_id}` | ✅ (self) | Positions |
 | `GET` | `/api/portfolio/history/{user_id}` | ✅ (self) | Action history |
 | `GET` | `/api/portfolio/yields/aave/{asset}` | – | Live Aave APY |
+| `GET` | `/api/portfolio/yields/gmx` | – | Live GMX GM pool APY |
 
 ## Local development
 
@@ -240,13 +273,13 @@ ENVIRONMENT=testing python -m pytest --ignore=tests/live -q
 
 ## Production readiness & known gaps
 
-**Verified working on mainnet:** config green (`chain_id 42161`, dedicated RPC), ZeroDev gas sponsorship live (real sponsored UserOp mined), deterministic strategies, policy-bounded session security, cryptographic auth + tenant isolation.
+**Verified working on mainnet:** config green (`chain_id 42161`, dedicated RPC), ZeroDev gas sponsorship live (real sponsored UserOp mined), deterministic strategies + best-yield router, signing-free session execution across Aave/LP/GMX, policy-bounded session security, cryptographic auth + tenant isolation, **durable Postgres (Supabase)** persistence.
 
 **Must address before calling it fully production-grade:**
 
-1. **Durable database.** The backend currently uses SQLite on Vercel's ephemeral `/tmp` — session approvals and positions reset on cold start. **Move to Postgres** (Neon/Supabase) for real persistence. *(Highest-priority gap.)*
-2. **Key rotation.** Rotate any keys shared during development. The agent key holds no funds (gasless signer only), but rotate regardless; ideally store it in a KMS/HSM and consider per-user session signers.
-3. **CORS tightening.** The preview regex allows any `https://axis*.vercel.app`; pin exact production origins for audit.
-4. **Paymaster spend cap.** Set a project-level ZeroDev cap so a bug can't drain the sponsor; the per-user rate-limit policy (100/day) already bounds abuse.
+1. **Key rotation.** Rotate any keys/DB password shared during development. The agent key holds no funds (gasless signer only), but rotate regardless; ideally store it in a KMS/HSM and consider per-user session signers.
+2. **CORS tightening.** The preview regex allows any `https://axis*.vercel.app`; pin exact production origins for audit.
+3. **Paymaster spend cap.** Set a project-level ZeroDev cap so a bug can't drain the sponsor; the per-user rate-limit policy (100/day) already bounds abuse.
+4. **USDT/native deployment.** Held USDT/ETH are surfaced but not auto-deployed (session policy is USDC-supply based). Adding a pinned USDT→USDC (or supply) path is a scoped follow-up.
 
 These are tracked in [`docs/PRODUCTION_AUDIT.md`](docs/PRODUCTION_AUDIT.md) and [`docs/AXIS_MEMORY.md`](docs/AXIS_MEMORY.md).

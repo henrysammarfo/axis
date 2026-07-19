@@ -1,9 +1,18 @@
 # AXIS — Production Mainnet Audit & Mandatory Build Plan
 
 > **Status:** Source of truth for production / enterprise / audit readiness  
-> **Last verified:** 2026-07-15  
+> **Last verified:** 2026-07-15 (build-plan) · **Progress update:** 2026-07-19  
 > **Primary settlement chain:** **Arbitrum One (`42161`)** — not Sepolia  
 > **Rule:** Nothing in this document is optional. Every item is mandatory to ship.
+
+> ### ✅ Since this plan was written (2026-07-19)
+> The Sepolia-scaffold verdict in §1 is **historical**. The mainnet cutover is done and the following are live on **Arbitrum One (`42161`)**:
+> - Magic → EIP-7702 (Type-4) delegation + ZeroDev SRA cross-chain USDC deposits.
+> - **Signing-free** hands-off session keys (policy-bounded) executing across **Aave USDC**, the **Uniswap V3 USDC/USDT stable LP**, and **GMX V2 GM ETH/USD** — no user signing after Google login.
+> - **Best-yield router** + **one-tap "Apply best route"** with balance-aware pre-skip and power-user venue toggles.
+> - **PostgreSQL (Supabase)** durable state via async SQLAlchemy + asyncpg (§4 P0 "SQLite" gap resolved).
+>
+> Current product truth lives in [`AXIS_MEMORY.md`](AXIS_MEMORY.md); architecture + diagrams in [`ARCHITECTURE.md`](ARCHITECTURE.md). **Still open:** key/DB-password rotation, exact-origin CORS, explicit paymaster spend cap, USDT/native auto-deployment.
 
 This document fact-checks repo MDs + live code + public Particle/ZeroDev docs.  
 Do **not** trust `AXIS_BUILD_GUIDE.md` as current — it retains known errors.
