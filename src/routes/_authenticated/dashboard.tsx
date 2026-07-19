@@ -946,7 +946,9 @@ function Dashboard() {
                       </p>
                     </div>
                     <div className="border border-white/10 rounded-lg py-2">
-                      <p className="text-[9px] uppercase tracking-widest text-white/40">Deploying</p>
+                      <p className="text-[9px] uppercase tracking-widest text-white/40">
+                        {route.data.projected ? "Would deploy" : "Deploying"}
+                      </p>
                       <p className="text-lg tracking-[-0.03em]">
                         ${route.data.route.deployed_usdc.toFixed(2)}
                       </p>
@@ -972,8 +974,9 @@ function Dashboard() {
                   {route.data.budget_usdc > 0 && (
                     <p className="mt-1 text-[10px] uppercase tracking-widest text-white/40">
                       Budget · ${route.data.deployed_usdc.toFixed(2)} used of $
-                      {route.data.budget_usdc.toFixed(2)} · ${route.data.budget_room_usdc.toFixed(2)}{" "}
-                      left to invest
+                      {route.data.budget_usdc.toFixed(2)} · $
+                      {Math.max(0, route.data.budget_usdc - route.data.deployed_usdc).toFixed(2)} left
+                      in budget
                     </p>
                   )}
 
