@@ -25,6 +25,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   X,
+  Pencil,
 } from "lucide-react";
 import { Route as AuthenticatedRoute } from "../_authenticated";
 import {
@@ -181,6 +182,8 @@ function Dashboard() {
   const route = useRoutePreview(userId, session.uaAddress, excludeVenues);
   const applyRoute = useApplyRoute();
   const [applyingRoute, setApplyingRoute] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState("");
   const toggleVenue = (venue: string) =>
     setExcludeVenues((prev) =>
       prev.includes(venue) ? prev.filter((v) => v !== venue) : [...prev, venue],
@@ -296,6 +299,35 @@ function Dashboard() {
     }
   };
 
+  const onSaveBudget = async () => {
+    if (!userId || !session.uaAddress) return;
+    const n = Math.round(Number(budgetInput) * 100) / 100;
+    if (!Number.isFinite(n) || n < 10) {
+      toast.error("Minimum is $10", {
+        description: "Choose how much AXIS should invest — $10 or more.",
+      });
+      return;
+    }
+    try {
+      await activateMutation.mutateAsync({
+        user_id: userId,
+        budget_usdc: n,
+        risk_level: axisStatus?.risk_level || risk || "moderate",
+        goal: axisStatus?.goal || goal || "Maximize yield",
+        ua_address: session.uaAddress,
+        sra_address: session.sraAddress,
+      });
+      toast.success("Budget updated", {
+        description: `AXIS will invest up to $${n.toFixed(2)} — the rest stays in your wallet.`,
+      });
+      setEditingBudget(false);
+    } catch (e) {
+      toast.error("Couldn't update budget", {
+        description: e instanceof Error ? e.message : "Try again.",
+      });
+    }
+  };
+
   const setTab = (t: Tab) =>
     navigate({
       search: (p: { tab: Tab; chain: Chain | "All" }) => ({ ...p, tab: t }),
@@ -326,6 +358,7 @@ function Dashboard() {
 
   const totalBalance = s.totalAllocated;
   const weeklyYield = s.weeklyYield;
+  const currentBudget = Number(axisStatus?.budget_usdc ?? budgetParam ?? budget ?? 0) || 0;
 
   const copy = () => {
     if (!sra) return;
@@ -655,6 +688,62 @@ function Dashboard() {
                     maximumFractionDigits: 2,
                   })}
                 </div>
+
+                {/* Investment budget — you decide how much goes in, not your whole balance */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+                  <span className="uppercase tracking-widest text-white/40">Investment budget</span>
+                  {editingBudget ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="text-white/50">$</span>
+                      <input
+                        type="number"
+                        min={10}
+                        step={1}
+                        value={budgetInput}
+                        onChange={(e) => setBudgetInput(e.target.value)}
+                        className="w-24 bg-transparent border-b border-white/20 focus:border-[color:var(--color-lime)] outline-none text-white py-1"
+                        autoFocus
+                      />
+                      <button
+                        onClick={onSaveBudget}
+                        disabled={activateMutation.isPending}
+                        className="text-black bg-[color:var(--color-lime)] rounded-full px-3 py-1 font-medium disabled:opacity-50 cursor-pointer"
+                      >
+                        {activateMutation.isPending ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingBudget(false)}
+                        className="text-white/50 hover:text-white cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="text-white text-sm">
+                        $
+                        {currentBudget.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setBudgetInput(currentBudget ? String(currentBudget) : "");
+                          setEditingBudget(true);
+                        }}
+                        className="inline-flex items-center gap-1 text-[color:var(--color-lime)] hover:brightness-110 cursor-pointer"
+                      >
+                        <Pencil size={12} strokeWidth={1.75} /> Edit
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] text-white/40 max-w-prose">
+                  AXIS invests up to this amount — the rest of your balance stays in your
+                  wallet. You choose, it&apos;s never your whole balance.
+                </p>
+
                 {activating && (
                   <p className="mt-4 text-sm text-[color:var(--color-lime)] uppercase tracking-widest">
                     Setting up your agent…
@@ -697,7 +786,11 @@ function Dashboard() {
                       disabled={deploying || !session.uaAddress}
                       className="mt-4 bg-[color:var(--color-lime)] text-black rounded-full px-6 py-3 text-xs uppercase tracking-widest font-medium disabled:opacity-50 cursor-pointer"
                     >
-                      {deploying ? "AXIS is getting to work…" : "Begin — put my money to work"}
+                      {deploying
+                        ? "AXIS is getting to work…"
+                        : `Begin — put $${currentBudget.toLocaleString(undefined, {
+                            maximumFractionDigits: 0,
+                          })} to work`}
                     </button>
                   </div>
                 )}
