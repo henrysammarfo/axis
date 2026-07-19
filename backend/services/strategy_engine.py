@@ -126,6 +126,13 @@ def goal_label(goal: Goal) -> str:
     }[goal]
 
 
+def cash_buffer_pct(risk_level: str | RiskLevel, goal: str | Goal) -> float:
+    """The undeployed USDC buffer fraction for a (risk, goal) cell (shared by the router)."""
+    risk = risk_level if isinstance(risk_level, RiskLevel) else parse_risk_level(risk_level)
+    goal_e = goal if isinstance(goal, Goal) else parse_goal(goal)
+    return _MATRIX[(risk, goal_e)][0]
+
+
 def build_plan(
     risk_level: str | RiskLevel,
     goal: str | Goal,

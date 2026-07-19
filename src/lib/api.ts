@@ -75,6 +75,101 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type RouteVenueQuote = {
+  venue: string;
+  protocol: string;
+  asset: string;
+  apy: number;
+  risk_tier: string;
+  eligible: boolean;
+  source: string;
+  reason: string;
+};
+
+export type RouteLeg = {
+  venue: string;
+  protocol: string;
+  asset: string;
+  action: string;
+  amount_usdc: number;
+  share_of_deployed: number;
+  estimated_apy: number;
+  risk_tier: string;
+};
+
+export type RoutePlan = {
+  risk_level: string;
+  goal: string;
+  budget_usdc: number;
+  cash_buffer_usdc: number;
+  deployed_usdc: number;
+  legs: RouteLeg[];
+  quotes: RouteVenueQuote[];
+  blended_apy: number;
+  estimated_weekly_yield_usdc: number;
+  market_risk_used: boolean;
+  notes: string[];
+};
+
+export type WalletBalances = {
+  usdc: number;
+  usdt: number;
+  eth: number;
+};
+
+export type RoutePreviewResponse = {
+  status: string;
+  route: RoutePlan;
+  idle_usdc: number;
+  projected: boolean;
+  market_risk_ok: boolean;
+  session_active: boolean;
+  balances: WalletBalances;
+  gmx_fundable: boolean;
+  gmx_fee_eth: number;
+};
+
+export type RouteApplyGroup = {
+  venue: string;
+  protocol: string;
+  asset: string;
+  amount_usdc: number;
+  estimated_apy: number;
+  risk_tier: string;
+  calls: Array<{ to: string; data: string; value?: string; purpose?: string }>;
+};
+
+export type RouteApplyPrepareResponse = {
+  status: "pending_execution" | string;
+  route: RoutePlan;
+  groups: RouteApplyGroup[];
+  idle_usdc: number;
+  execution_fee_wei: string;
+  balances: WalletBalances;
+  pre_skipped: Array<{ venue: string; reason: string }>;
+  explanation: string;
+};
+
+export type RouteApplyLeg = {
+  venue: string;
+  tx_hash: string;
+  amount_usdc?: number;
+  estimated_apy?: number;
+};
+
+export type RouteApplyConfirmResponse = {
+  status: string;
+  applied: Array<{
+    venue: string;
+    protocol: string;
+    asset: string;
+    amount_usdc: number;
+    tx_hash: string;
+  }>;
+  count: number;
+  explanation: string;
+};
+
 export const axisApi = {
   health: () => request<{ status: string; ai_provider: string }>("/health"),
   configStatus: () => request<ConfigStatus>("/config/status"),
@@ -275,8 +370,8 @@ export const axisApi = {
 
   prepareGmxDeposit: (body: { user_id: string; ua_address: string; usdc_amount?: number }) =>
     request<{
-      status: "pending_signatures" | string;
-      transactions: import("./strategy").ActivationTransaction[];
+      status: "pending_execution" | string;
+      calls: Array<{ to: string; data: string; value?: string; purpose?: string }>;
       usdc_amount: number;
       execution_fee_wei: string;
       execution_fee_eth: number;
@@ -297,8 +392,8 @@ export const axisApi = {
 
   prepareGmxWithdraw: (body: { user_id: string; ua_address: string }) =>
     request<{
-      status: "pending_signatures" | "no_action" | string;
-      transactions: import("./strategy").ActivationTransaction[];
+      status: "pending_execution" | "no_action" | string;
+      calls: Array<{ to: string; data: string; value?: string; purpose?: string }>;
       gm_amount_raw?: string;
       execution_fee_wei?: string;
       execution_fee_eth?: number;
@@ -322,6 +417,29 @@ export const axisApi = {
       custom_strategy: import("./strategy").CustomStrategy;
       message?: string;
     }>("/api/agent/strategy/custom", { method: "POST", body: JSON.stringify(body) }),
+
+  previewRoute: (body: {
+    user_id: string;
+    ua_address: string;
+    budget_usdc?: number;
+    exclude_venues?: string[];
+  }) =>
+    request<RoutePreviewResponse>("/api/agent/route/preview", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  prepareRouteApply: (body: { user_id: string; ua_address: string; exclude_venues?: string[] }) =>
+    request<RouteApplyPrepareResponse>("/api/agent/route/apply/prepare", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  confirmRouteApply: (body: { user_id: string; ua_address: string; legs: RouteApplyLeg[] }) =>
+    request<RouteApplyConfirmResponse>("/api/agent/route/apply/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   status: (userId: string) => request<AgentStatus>(`/api/agent/status/${userId}`),
 

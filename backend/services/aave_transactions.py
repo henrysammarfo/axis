@@ -89,6 +89,19 @@ def get_token_balance_usdc(owner: str, asset: str = "USDC") -> float:
     return raw / (10**decimals)
 
 
+def get_native_balance_wei(owner: str) -> int:
+    """Native ETH balance (wei) the account holds on the settlement chain.
+
+    Used to decide up-front whether a venue that needs the user's own ETH (e.g.
+    GMX's keeper fee) is fundable, so the one-tap route can pre-skip it cleanly
+    instead of failing a leg on-chain. Returns 0 on any read error.
+    """
+    try:
+        return int(_w3().eth.get_balance(to_checksum_address(owner)))
+    except Exception:
+        return 0
+
+
 def require_usdc_funding(owner: str, budget_usdc: float) -> float:
     balance = get_token_balance_usdc(owner, "USDC")
     if balance + 1e-6 < budget_usdc:
@@ -267,6 +280,21 @@ def _usdc_supply_calls(owner_cs: str, amount_raw: int, cid: int) -> list[dict[st
             "chain_id": cid,
         },
     ]
+
+
+def build_supply_calls(*, owner: str, usdc_amount: float) -> list[dict[str, Any]]:
+    """Policy-safe session calls to supply an explicit USDC amount to Aave.
+
+    Returns [approve USDC->Pool, supply(USDC, onBehalfOf=owner)] — the exact pair
+    the session CallPolicy allows. Used by the one-tap route apply to place the
+    stable core gaslessly (no signing). Empty list if the amount rounds to zero.
+    """
+    owner_cs = to_checksum_address(owner)
+    cid = _chain_id()
+    amount_raw = usdc_to_raw(usdc_amount)
+    if amount_raw <= 0:
+        return []
+    return _usdc_supply_calls(owner_cs, amount_raw, cid)
 
 
 def _usdc_withdraw_all_call(owner_cs: str, cid: int) -> dict[str, Any]:

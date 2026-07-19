@@ -43,6 +43,37 @@ const UNISWAP_SIGNATURES = {
   burn: "burn(uint256)",
 } as const;
 
+// GMX V2 GM ETH/USD pool (signing-free market-risk strategy, consent-gated).
+// Addresses + pinned offsets MUST mirror backend/services/gmx_gm.py (locked by
+// backend/tests/test_gmx_gm.py). Deposits/withdrawals run as individual session
+// calls (NOT GMX's multicall), so createDeposit/createWithdrawal are direct calls
+// whose `receiver`/`market` we pin at fixed offsets — a leaked agent key can only
+// ever route GM tokens/withdrawals back to the owner.
+export const GMX_EXCHANGE_ROUTER = "0x69C527fC77291722b52649E45c838e41be8Bf5d5" as const;
+export const GMX_ROUTER = "0x7452c558d45f8afC8c83dAe62C3f8A5BE19c71f6" as const;
+export const GMX_DEPOSIT_VAULT = "0xF89e77e8Dc11691C9e8757e84aaFbCD8A67d7A55" as const;
+export const GMX_WITHDRAWAL_VAULT = "0x0628D46b5D145f183AdB6Ef1f2c97eD1C4701c55" as const;
+export const GMX_GM_ETH_USD_MARKET = "0x70d95587d40A2caf56bd97485aB3Eec10Bee6336" as const;
+// sendWnt(address,uint256): receiver @0. sendTokens(address,address,uint256): token @0, receiver @32.
+const GMX_SENDWNT_RECEIVER_OFFSET = 0;
+const GMX_SENDTOKENS_TOKEN_OFFSET = 0;
+const GMX_SENDTOKENS_RECEIVER_OFFSET = 32;
+// create* structs (empty swap paths + dataList → deterministic layout).
+const GMX_DEPOSIT_RECEIVER_OFFSET = 224;
+const GMX_DEPOSIT_MARKET_OFFSET = 320;
+const GMX_WITHDRAW_RECEIVER_OFFSET = 256;
+const GMX_WITHDRAW_MARKET_OFFSET = 352;
+// Max ETH the session may forward as the keeper execution fee (mirror gmx_gm.py).
+const GMX_SEND_WNT_VALUE_CAP = 10_000_000_000_000_000n; // 0.01 ETH
+const GMX_SIGNATURES = {
+  sendWnt: "sendWnt(address,uint256)",
+  sendTokens: "sendTokens(address,address,uint256)",
+  createDeposit:
+    "createDeposit(((address,address,address,address,address,address,address[],address[]),uint256,bool,uint256,uint256,bytes32[]))",
+  createWithdrawal:
+    "createWithdrawal(((address,address,address,address,address[],address[]),uint256,uint256,bool,uint256,uint256,bytes32[]))",
+} as const;
+
 const ERC20_APPROVE_ABI = [
   {
     type: "function",
@@ -95,9 +126,11 @@ export async function buildSessionApproval(params: {
   ownerAddress: string;
   sessionSignerAddress: string;
   /**
-   * When true, also authorize the Uniswap V3 USDC/USDT stable LP path
-   * (swap + mint + decrease/collect/burn). Recipients are pinned to the owner,
-   * so funds can still only ever return to the user. Gate on explicit consent.
+   * When true, also authorize the market-risk paths — the Uniswap V3 USDC/USDT
+   * stable LP (swap + mint + decrease/collect/burn) AND the GMX V2 GM ETH/USD
+   * pool (approve + sendWnt + sendTokens + createDeposit/createWithdrawal).
+   * Recipients/receivers are pinned to the owner, so funds can only ever return
+   * to the user even if the agent key is compromised. Gate on explicit consent.
    */
   includeMarketRisk?: boolean;
 }): Promise<string> {
@@ -229,6 +262,76 @@ export async function buildSessionApproval(params: {
           selector: toFunctionSelector(UNISWAP_SIGNATURES.burn),
           valueLimit: 0n,
           rules: [],
+        },
+
+        // --- GMX V2 GM ETH/USD pool (signing-free; keeper fee from user ETH) ---
+        // approve USDC / GM token -> GMX Router (the ERC20 approval target).
+        {
+          target: USDC_ARBITRUM,
+          abi: ERC20_APPROVE_ABI,
+          functionName: "approve",
+          args: [{ condition: ParamCondition.EQUAL, value: GMX_ROUTER }, null],
+        },
+        {
+          target: GMX_GM_ETH_USD_MARKET,
+          abi: ERC20_APPROVE_ABI,
+          functionName: "approve",
+          args: [{ condition: ParamCondition.EQUAL, value: GMX_ROUTER }, null],
+        },
+        // sendWnt(vault, fee): the ONLY call allowed to carry ETH value (capped).
+        // Pin the receiver to the Deposit/Withdrawal vault so the fee can't be
+        // diverted; value is bounded by GMX_SEND_WNT_VALUE_CAP.
+        {
+          target: GMX_EXCHANGE_ROUTER,
+          selector: toFunctionSelector(GMX_SIGNATURES.sendWnt),
+          valueLimit: GMX_SEND_WNT_VALUE_CAP,
+          rules: [eq(GMX_SENDWNT_RECEIVER_OFFSET, GMX_DEPOSIT_VAULT)],
+        },
+        {
+          target: GMX_EXCHANGE_ROUTER,
+          selector: toFunctionSelector(GMX_SIGNATURES.sendWnt),
+          valueLimit: GMX_SEND_WNT_VALUE_CAP,
+          rules: [eq(GMX_SENDWNT_RECEIVER_OFFSET, GMX_WITHDRAWAL_VAULT)],
+        },
+        // sendTokens(token, vault, amount): USDC -> DepositVault (fund a deposit).
+        {
+          target: GMX_EXCHANGE_ROUTER,
+          selector: toFunctionSelector(GMX_SIGNATURES.sendTokens),
+          valueLimit: 0n,
+          rules: [
+            eq(GMX_SENDTOKENS_TOKEN_OFFSET, USDC_ARBITRUM),
+            eq(GMX_SENDTOKENS_RECEIVER_OFFSET, GMX_DEPOSIT_VAULT),
+          ],
+        },
+        // sendTokens: GM token -> WithdrawalVault (fund a withdrawal).
+        {
+          target: GMX_EXCHANGE_ROUTER,
+          selector: toFunctionSelector(GMX_SIGNATURES.sendTokens),
+          valueLimit: 0n,
+          rules: [
+            eq(GMX_SENDTOKENS_TOKEN_OFFSET, GMX_GM_ETH_USD_MARKET),
+            eq(GMX_SENDTOKENS_RECEIVER_OFFSET, GMX_WITHDRAWAL_VAULT),
+          ],
+        },
+        // createDeposit: receiver=owner, market=GM ETH/USD (both pinned).
+        {
+          target: GMX_EXCHANGE_ROUTER,
+          selector: toFunctionSelector(GMX_SIGNATURES.createDeposit),
+          valueLimit: 0n,
+          rules: [
+            eq(GMX_DEPOSIT_RECEIVER_OFFSET, owner),
+            eq(GMX_DEPOSIT_MARKET_OFFSET, GMX_GM_ETH_USD_MARKET),
+          ],
+        },
+        // createWithdrawal: receiver=owner, market=GM ETH/USD (both pinned).
+        {
+          target: GMX_EXCHANGE_ROUTER,
+          selector: toFunctionSelector(GMX_SIGNATURES.createWithdrawal),
+          valueLimit: 0n,
+          rules: [
+            eq(GMX_WITHDRAW_RECEIVER_OFFSET, owner),
+            eq(GMX_WITHDRAW_MARKET_OFFSET, GMX_GM_ETH_USD_MARKET),
+          ],
         },
       ]
     : [];

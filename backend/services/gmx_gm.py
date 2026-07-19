@@ -1,21 +1,25 @@
-"""GMX V2 GM pool liquidity (Arbitrum One) — the one *Pro, user-signed* strategy.
+"""GMX V2 GM pool liquidity (Arbitrum One) — a signing-free, session-key strategy.
 
-Unlike Aave and the Uniswap stable LP (gasless, USDC-only, session-key, funds
-pinned on-chain), GMX V2 has hard requirements that don't fit the hands-off model:
+Like Aave and the Uniswap stable LP, GMX runs through the AXIS session key: the
+user never signs a transaction. The one GMX-specific twist is the **native ETH
+keeper execution fee** — the paymaster sponsors gas, but it cannot pay a
+protocol's fee, so that small amount comes from the user's own ETH balance (the
+account can hold native ETH; it is not USDC-only). We do not "sponsor GMX".
 
-  * A **native ETH execution fee** must be sent to a keeper (`sendWnt`). Our
-    gasless accounts hold only USDC, so this can't be paid by the session.
-  * Deposits/withdrawals are **asynchronous** — your transaction only *creates*
-    the request; a keeper executes it a few seconds later. So we verify the
-    create tx and record a *pending* position, then reconcile from the GM balance.
-  * `createDeposit` takes a **dynamic struct**, so a session CallPolicy can't pin
-    the receiver at a fixed calldata offset.
+We execute the deposit/withdrawal as a batch of *individual* calls
+(`approve` + `sendWnt` + `sendTokens` + `createDeposit`/`createWithdrawal`) in one
+UserOp — NOT via GMX's `multicall`. That keeps `createDeposit` a direct call so
+the session CallPolicy can pin `receiver` (to the owner) and `market` at fixed
+calldata offsets: a leaked agent key can never route GM tokens or withdrawals
+anywhere but back to the user.
 
-Because of that, GMX is exposed as an explicit, **user-signed** action (the user
-signs their own tx in their wallet, so the receiver is always themselves — no
-agent key is ever trusted with it). It is gated behind the Aggressive tier +
-one-time market-risk consent, and it carries real market risk (GM LPs are the
-counterparty to leveraged traders).
+Deposits/withdrawals settle asynchronously (a keeper executes the request a few
+seconds later), so we verify the create tx and record the position; the balance
+reconciles from chain.
+
+The pinned offsets below MUST stay in sync with the manual CallPolicy rules in
+`src/lib/kernel-session.ts`. `tests/test_gmx_gm.py` locks them by encoding real
+calldata and asserting the pinned words.
 
 Addresses/struct verified against:
   * GMX contract source: contracts/deposit/IDepositUtils.sol,
@@ -58,7 +62,6 @@ _MAX_EXECUTION_FEE_WEI = 3_000_000_000_000_000  # 0.003 ETH cap
 # Solidity signatures (nested tuples flattened, matching the GMX source structs).
 SEND_WNT_SIG = "sendWnt(address,uint256)"
 SEND_TOKENS_SIG = "sendTokens(address,address,uint256)"
-MULTICALL_SIG = "multicall(bytes[])"
 CREATE_DEPOSIT_SIG = (
     "createDeposit("
     "((address,address,address,address,address,address,address[],address[]),"
@@ -83,7 +86,8 @@ _WITHDRAWAL_PARAMS_TYPE = (
 
 CREATE_DEPOSIT_SELECTOR = "0x" + function_signature_to_4byte_selector(CREATE_DEPOSIT_SIG).hex()
 CREATE_WITHDRAWAL_SELECTOR = "0x" + function_signature_to_4byte_selector(CREATE_WITHDRAWAL_SIG).hex()
-MULTICALL_SELECTOR = "0x" + function_signature_to_4byte_selector(MULTICALL_SIG).hex()
+SEND_WNT_SELECTOR = "0x" + function_signature_to_4byte_selector(SEND_WNT_SIG).hex()
+SEND_TOKENS_SELECTOR = "0x" + function_signature_to_4byte_selector(SEND_TOKENS_SIG).hex()
 
 _ERC20_ABI = [
     {
@@ -138,41 +142,54 @@ def get_gm_balance(owner: str, market: str = GM_ETH_USD_MARKET) -> int:
     return int(token.functions.balanceOf(to_checksum_address(owner)).call())
 
 
-def _multicall_tx(inner_calls: list[bytes], value_wei: int) -> dict[str, Any]:
-    data = _encode_call(MULTICALL_SIG, ["bytes[]"], [inner_calls])
+# --- Pinned calldata offsets (bytes, AFTER the 4-byte selector). ------------
+# The session CallPolicy pins these words so a leaked agent key can only ever
+# deposit/withdraw with `receiver` = the owner and `market` = the vetted GM
+# market. Offsets are deterministic because the swap paths + dataList are always
+# empty. Mirror these EXACTLY in src/lib/kernel-session.ts; test_gmx_gm.py locks
+# them by encoding real calldata and asserting the words land here.
+DEPOSIT_RECEIVER_OFFSET = 224
+DEPOSIT_MARKET_OFFSET = 320
+WITHDRAW_RECEIVER_OFFSET = 256
+WITHDRAW_MARKET_OFFSET = 352
+
+# Upper bound on the ETH the session may forward as the keeper execution fee.
+# Above our _MAX_EXECUTION_FEE_WEI cap, with headroom, so a leaked key can never
+# drain more than a few dollars of ETH per action via sendWnt.
+SEND_WNT_VALUE_CAP_WEI = 10_000_000_000_000_000  # 0.01 ETH
+
+
+def _call(to: str, data: bytes, value_wei: int, purpose: str) -> dict[str, Any]:
     return {
-        "purpose": "gmx_multicall",
-        "to": to_checksum_address(EXCHANGE_ROUTER),
+        "purpose": purpose,
+        "to": to_checksum_address(to),
         "data": _hex(data),
         "value": hex(value_wei),
         "chain_id": ARBITRUM_ONE_CHAIN_ID,
     }
 
 
-def _approve_tx(token: str, spender: str, amount_raw: int, purpose: str) -> dict[str, Any]:
-    return {
-        "purpose": purpose,
-        "to": to_checksum_address(token),
-        "data": _hex(
-            _encode_call(APPROVE_SIG, ["address", "uint256"], [to_checksum_address(spender), amount_raw])
-        ),
-        "value": "0x0",
-        "chain_id": ARBITRUM_ONE_CHAIN_ID,
-    }
+def _approve_call(token: str, spender: str, amount_raw: int, purpose: str) -> dict[str, Any]:
+    data = _encode_call(APPROVE_SIG, ["address", "uint256"], [to_checksum_address(spender), amount_raw])
+    return _call(token, data, 0, purpose)
 
 
-def build_gm_deposit_txs(
+def build_gm_deposit_calls(
     *,
     owner: str,
     usdc_amount: float,
     execution_fee_wei: int | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """
-    Build user-signed txs to add USDC liquidity to the GM ETH/USD pool.
+    Build signing-free session calls to add USDC liquidity to the GM ETH/USD pool.
 
-    Returns (txs, execution_fee_wei). `txs` = [approve USDC->Router, multicall].
-    The multicall sends the ETH execution fee + USDC to the DepositVault and
-    creates the deposit with `receiver` = owner (GM tokens minted to the user).
+    Returns (calls, execution_fee_wei). `calls` (executed atomically in one UserOp):
+      1. approve USDC -> GMX Router
+      2. sendWnt(DepositVault, fee)          value = fee   (from the user's ETH)
+      3. sendTokens(USDC, DepositVault, amt)
+      4. createDeposit(params)               receiver = owner (pinned)
+
+    The keeper mints GM tokens to the owner a few seconds later.
     """
     _require_arbitrum_one()
     owner_cs = to_checksum_address(owner)
@@ -208,26 +225,32 @@ def build_gm_deposit_txs(
     )
     create_deposit = _encode_call(CREATE_DEPOSIT_SIG, [_DEPOSIT_PARAMS_TYPE], [deposit_params])
 
-    txs = [
-        _approve_tx(USDC_ARBITRUM, GMX_ROUTER, usdc_raw, "approve_usdc_gmx_router"),
-        _multicall_tx([send_wnt, send_tokens, create_deposit], fee),
+    calls = [
+        _approve_call(USDC_ARBITRUM, GMX_ROUTER, usdc_raw, "approve_usdc_gmx_router"),
+        _call(EXCHANGE_ROUTER, send_wnt, fee, "gmx_send_wnt"),
+        _call(EXCHANGE_ROUTER, send_tokens, 0, "gmx_send_tokens"),
+        _call(EXCHANGE_ROUTER, create_deposit, 0, "gmx_create_deposit"),
     ]
-    return txs, fee
+    return calls, fee
 
 
-def build_gm_withdraw_txs(
+def build_gm_withdraw_calls(
     *,
     owner: str,
     gm_amount_raw: int,
     execution_fee_wei: int | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """
-    Build user-signed txs to redeem GM ETH/USD tokens back to the owner.
+    Build signing-free session calls to redeem GM ETH/USD tokens back to the owner.
 
-    Returns (txs, execution_fee_wei). `txs` = [approve GM->Router, multicall].
-    The multicall sends the ETH execution fee + GM tokens to the WithdrawalVault
-    and creates the withdrawal with `receiver` = owner. shouldUnwrapNativeToken
-    returns the WETH leg as native ETH; the USDC leg is returned as USDC.
+    Returns (calls, execution_fee_wei). `calls` (executed atomically in one UserOp):
+      1. approve GM token -> GMX Router
+      2. sendWnt(WithdrawalVault, fee)       value = fee   (from the user's ETH)
+      3. sendTokens(GM, WithdrawalVault, amt)
+      4. createWithdrawal(params)            receiver = owner (pinned)
+
+    shouldUnwrapNativeToken returns the WETH leg as native ETH; the USDC leg
+    comes back as USDC. Both settle to the owner via the keeper.
     """
     _require_arbitrum_one()
     owner_cs = to_checksum_address(owner)
@@ -263,8 +286,10 @@ def build_gm_withdraw_txs(
         CREATE_WITHDRAWAL_SIG, [_WITHDRAWAL_PARAMS_TYPE], [withdrawal_params]
     )
 
-    txs = [
-        _approve_tx(GM_ETH_USD_MARKET, GMX_ROUTER, gm_amount_raw, "approve_gm_gmx_router"),
-        _multicall_tx([send_wnt, send_tokens, create_withdrawal], fee),
+    calls = [
+        _approve_call(GM_ETH_USD_MARKET, GMX_ROUTER, gm_amount_raw, "approve_gm_gmx_router"),
+        _call(EXCHANGE_ROUTER, send_wnt, fee, "gmx_send_wnt"),
+        _call(EXCHANGE_ROUTER, send_tokens, 0, "gmx_send_tokens"),
+        _call(EXCHANGE_ROUTER, create_withdrawal, 0, "gmx_create_withdrawal"),
     ]
-    return txs, fee
+    return calls, fee

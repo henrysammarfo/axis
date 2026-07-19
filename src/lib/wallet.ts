@@ -19,6 +19,7 @@ import { OAuthExtension } from "@magic-ext/oauth2";
 import { EVMExtension } from "@magic-ext/evm";
 import type { MagicUserMetadata } from "@magic-sdk/types";
 import { axisApi } from "./api";
+import type { RouteApplyLeg } from "./api";
 import {
   arbitrumChainId,
   ARBITRUM_ONE_CHAIN_ID,
@@ -1023,12 +1024,13 @@ export async function closeLpViaSession(body: {
 }
 
 /**
- * Add USDC liquidity to the GMX ETH/USD GM pool. Pro, user-signed action:
- * the user signs the approve + createDeposit multicall in their Magic wallet
- * (receiver = themselves). Their account needs a little ETH for gas + the keeper
- * execution fee. GM tokens settle a few seconds later via the GMX keeper.
+ * Add USDC liquidity to the GMX ETH/USD GM pool via the session key — NO signing.
+ * The agent executes approve + sendWnt + sendTokens + createDeposit in one gasless
+ * UserOp (receiver pinned to the owner on-chain). Gas is sponsored; GMX's native
+ * ETH keeper fee is drawn from the account's own ETH balance (excess refunded).
+ * Requires the market-risk session (enableMarketRiskSession) to be active.
  */
-export async function depositGmxViaWallet(body: {
+export async function depositGmxViaSession(body: {
   user_id: string;
   ua_address: string;
   usdc_amount?: number;
@@ -1037,29 +1039,132 @@ export async function depositGmxViaWallet(body: {
     throw new Error("GMX is available on Arbitrum One only.");
   }
   const prepared = await axisApi.prepareGmxDeposit(body);
-  if (prepared.status !== "pending_signatures" || !prepared.transactions?.length) {
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
     return { status: prepared.status, explanation: prepared.explanation };
   }
 
-  const signed = await signActivationTransactions(prepared.transactions);
-  const createTx = signed.find((t) => t.purpose === "gmx_multicall") ?? signed[signed.length - 1];
-  if (!createTx?.tx_hash) {
-    throw new Error("GMX deposit did not return a transaction hash.");
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not add to GMX. Make sure you have a little ETH for the keeper fee.");
   }
 
   const confirmed = await axisApi.confirmGmxDeposit({
     user_id: body.user_id,
     ua_address: body.ua_address,
     usdc_amount: prepared.usdc_amount,
-    tx_hash: createTx.tx_hash,
+    tx_hash: result.tx_hash,
   });
-  return { ...confirmed, tx_hash: createTx.tx_hash };
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
+export type RouteApplyResult = {
+  applied: Array<{
+    venue: string;
+    protocol: string;
+    asset: string;
+    amount_usdc: number;
+    tx_hash: string;
+  }>;
+  skipped: Array<{ venue: string; amount_usdc: number; reason: string }>;
+  explanation: string;
+};
+
+/**
+ * One-tap: apply the entire best-yield route via the session key — NO signing.
+ *
+ * Runs each venue group as its own gasless UserOp, in order (the stable Aave USDC
+ * core first, then the market sleeve). If a leg can't land (e.g. no ETH for the
+ * GMX keeper fee), it's skipped gracefully and the rest still go through — then we
+ * confirm only the legs that actually executed and return a "what AXIS did" summary.
+ */
+export async function applyRouteViaSession(body: {
+  user_id: string;
+  ua_address: string;
+  exclude_venues?: string[];
+}): Promise<RouteApplyResult> {
+  const prepared = await axisApi.prepareRouteApply(body);
+
+  // Venues the backend pre-skipped (e.g. GMX with no ETH for the keeper fee) so
+  // the tap never attempts a leg that can't settle.
+  const skipped: RouteApplyResult["skipped"] = (prepared.pre_skipped ?? []).map((s) => ({
+    venue: s.venue,
+    amount_usdc: 0,
+    reason: s.reason,
+  }));
+
+  if (prepared.status !== "pending_execution" || !prepared.groups?.length) {
+    return {
+      applied: [],
+      skipped,
+      explanation: prepared.explanation ?? "Nothing to apply right now.",
+    };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const executed: RouteApplyLeg[] = [];
+
+  for (const group of prepared.groups) {
+    try {
+      const result = await executeSessionCalls({
+        data: {
+          didToken,
+          calls: group.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+        },
+      });
+      if (result.success && result.tx_hash) {
+        executed.push({
+          venue: group.venue,
+          tx_hash: result.tx_hash,
+          amount_usdc: group.amount_usdc,
+          estimated_apy: group.estimated_apy,
+        });
+      } else {
+        skipped.push({ venue: group.venue, amount_usdc: group.amount_usdc, reason: "not confirmed" });
+      }
+    } catch (err) {
+      skipped.push({
+        venue: group.venue,
+        amount_usdc: group.amount_usdc,
+        reason: err instanceof Error ? err.message : "failed",
+      });
+    }
+  }
+
+  let applied: RouteApplyResult["applied"] = [];
+  let explanation = prepared.explanation;
+  if (executed.length) {
+    const confirmed = await axisApi.confirmRouteApply({
+      user_id: body.user_id,
+      ua_address: body.ua_address,
+      legs: executed,
+    });
+    applied = confirmed.applied;
+    explanation = confirmed.explanation;
+  }
+
+  return { applied, skipped, explanation };
 }
 
 /**
- * Redeem the account's full GMX ETH/USD GM position back to the user (user-signed).
+ * Redeem the account's full GMX ETH/USD GM position back to the owner via the
+ * session key — NO signing. Same gasless flow as the deposit; the WETH leg comes
+ * back as native ETH and the USDC leg as USDC, both to the owner.
  */
-export async function withdrawGmxViaWallet(body: {
+export async function withdrawGmxViaSession(body: {
   user_id: string;
   ua_address: string;
 }): Promise<{ status: string; explanation: string; tx_hash?: string }> {
@@ -1067,22 +1172,31 @@ export async function withdrawGmxViaWallet(body: {
     throw new Error("GMX is available on Arbitrum One only.");
   }
   const prepared = await axisApi.prepareGmxWithdraw(body);
-  if (prepared.status !== "pending_signatures" || !prepared.transactions?.length) {
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
     return { status: prepared.status, explanation: prepared.explanation };
   }
 
-  const signed = await signActivationTransactions(prepared.transactions);
-  const createTx = signed.find((t) => t.purpose === "gmx_multicall") ?? signed[signed.length - 1];
-  if (!createTx?.tx_hash) {
-    throw new Error("GMX withdrawal did not return a transaction hash.");
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not close GMX. Make sure you have a little ETH for the keeper fee.");
   }
 
   const confirmed = await axisApi.confirmGmxWithdraw({
     user_id: body.user_id,
     ua_address: body.ua_address,
-    tx_hash: createTx.tx_hash,
+    tx_hash: result.tx_hash,
   });
-  return { ...confirmed, tx_hash: createTx.tx_hash };
+  return { ...confirmed, tx_hash: result.tx_hash };
 }
 
 export async function logout(): Promise<void> {
