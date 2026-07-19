@@ -27,6 +27,7 @@ GMX_APY_URLS = (
 )
 DEFILLAMA_POOLS_URL = "https://yields.llama.fi/pools"
 UNISWAP_FEE_POOL_META = {
+    100: "0.01%",
     500: "0.05%",
     3000: "0.3%",
     10000: "1%",

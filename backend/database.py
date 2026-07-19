@@ -108,5 +108,9 @@ async def init_db() -> None:
                 )
             if "custom_strategy" not in existing:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN custom_strategy JSON"))
+            if "market_risk_consent" not in existing:
+                sync_conn.execute(
+                    text(f"ALTER TABLE users ADD COLUMN market_risk_consent BOOLEAN DEFAULT {false_default}")
+                )
 
         await conn.run_sync(_migrate_user_columns)

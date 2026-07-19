@@ -24,6 +24,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { Route as AuthenticatedRoute } from "../_authenticated";
 import {
@@ -42,6 +43,13 @@ import {
   useRebalanceAxis,
   useRebalanceViaSession,
   useSaveCustomStrategy,
+  useEnableMarketRiskSession,
+  useOpenLpViaSession,
+  useCloseLpViaSession,
+  useDepositGmx,
+  useWithdrawGmx,
+  useRoutePreview,
+  useApplyRoute,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 
@@ -60,6 +68,27 @@ const RISK_LABEL: Record<RiskLevel, string> = {
   moderate: "Balanced",
   aggressive: "Bold",
 };
+
+const VENUE_LABEL: Record<string, string> = {
+  aave_usdc: "Aave · USDC",
+  aave_usdt: "Aave · USDT",
+  uniswap_lp: "Uniswap · USDC/USDT",
+  gmx_gm: "GMX · ETH/USD",
+};
+function venueLabel(venue: string): string {
+  return VENUE_LABEL[venue] ?? venue;
+}
+function riskLabel(tier: string): string {
+  if (tier === "stable") return "Stable";
+  if (tier === "stable-lp") return "Stable LP";
+  if (tier === "market") return "Market";
+  return tier;
+}
+function riskChip(tier: string): string {
+  if (tier === "market") return "border-white/25 text-white/60";
+  if (tier === "stable-lp") return "border-[color:var(--color-lime)]/30 text-[color:var(--color-lime)]/80";
+  return "border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)]";
+}
 
 const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
 const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
@@ -140,6 +169,23 @@ function Dashboard() {
   const rebalanceMutation = useRebalanceAxis();
   const sessionRebalance = useRebalanceViaSession();
   const saveCustom = useSaveCustomStrategy();
+  const enableLp = useEnableMarketRiskSession();
+  const openLp = useOpenLpViaSession();
+  const closeLp = useCloseLpViaSession();
+  const depositGmx = useDepositGmx();
+  const withdrawGmx = useWithdrawGmx();
+  const [excludeVenues, setExcludeVenues] = useState<string[]>([]);
+  const route = useRoutePreview(userId, session.uaAddress, excludeVenues);
+  const applyRoute = useApplyRoute();
+  const [applyingRoute, setApplyingRoute] = useState(false);
+  const toggleVenue = (venue: string) =>
+    setExcludeVenues((prev) =>
+      prev.includes(venue) ? prev.filter((v) => v !== venue) : [...prev, venue],
+    );
+  const [routeSummary, setRouteSummary] = useState<{
+    applied: Array<{ venue: string; asset: string; amount_usdc: number; tx_hash: string }>;
+    skipped: Array<{ venue: string; amount_usdc: number; reason: string }>;
+  } | null>(null);
   const activatedRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const [budget, setBudget] = useState(500);
@@ -151,6 +197,10 @@ function Dashboard() {
 
   const handsOff = Boolean(axisStatus?.session_active);
   const [usdcWeight, setUsdcWeight] = useState(60);
+  const [lpAmount, setLpAmount] = useState(0);
+  const [gmxAmount, setGmxAmount] = useState(0);
+  const marketRiskOn = Boolean(axisStatus?.market_risk_consent);
+  const isAggressive = (axisStatus?.risk_level || "").toLowerCase() === "aggressive";
 
   const activeRisk = (axisStatus?.risk_level || risk || "moderate") as RiskLevel;
   const activeGoal = (axisStatus?.goal || goal || GOALS[0]) as GoalLabel;
@@ -329,6 +379,148 @@ function Dashboard() {
       toast.error("Couldn't save that mix", {
         description: e instanceof Error ? e.message : "Weights must add up to 100%.",
       });
+    }
+  };
+
+  const onEnableLp = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      await enableLp.mutateAsync({ user_id: userId, ua_address: session.uaAddress });
+      toast.success("Stable LP unlocked", {
+        description: "AXIS can now open a Uniswap USDC/USDT LP for you — funds stay in your wallet.",
+      });
+    } catch (e) {
+      toast.error("Couldn't unlock the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  const onOpenLp = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await openLp.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        usdc_amount: lpAmount > 0 ? lpAmount : undefined,
+      });
+      toast.success("AXIS opened your LP", {
+        description: (res.explanation || "Your USDC/USDT stable LP is open.").slice(0, 140),
+      });
+    } catch (e) {
+      toast.error("Couldn't open the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  const onCloseLp = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await closeLp.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+      });
+      if (res.status === "no_action") {
+        toast.info("No open LP", {
+          description: res.explanation || "You don't have a stable LP open right now.",
+        });
+        return;
+      }
+      toast.success("AXIS closed your LP", {
+        description: (res.explanation || "Your funds are back in your wallet.").slice(0, 140),
+      });
+    } catch (e) {
+      toast.error("Couldn't close the LP", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  const onDepositGmx = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await depositGmx.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        usdc_amount: gmxAmount > 0 ? gmxAmount : undefined,
+      });
+      toast.success("GMX deposit submitted", {
+        description: (res.explanation || "GM tokens settle in a few seconds.").slice(0, 160),
+      });
+    } catch (e) {
+      toast.error("Couldn't add to GMX", {
+        description:
+          e instanceof Error ? e.message : "Make sure you hold a little ETH for the fee, then retry.",
+      });
+    }
+  };
+
+  const onWithdrawGmx = async () => {
+    if (!userId || !session.uaAddress) return;
+    try {
+      const res = await withdrawGmx.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+      });
+      if (res.status === "no_action") {
+        toast.info("No GMX position", {
+          description: res.explanation || "You don't have a GMX position open.",
+        });
+        return;
+      }
+      toast.success("GMX withdrawal submitted", {
+        description: (res.explanation || "Funds settle back to you shortly.").slice(0, 160),
+      });
+    } catch (e) {
+      toast.error("Couldn't close GMX", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  };
+
+  // One-tap: apply the ENTIRE best route (stable Aave core + market sleeve) via the
+  // session key — no signing. The backend groups the calls per venue; each group
+  // runs as its own gasless UserOp so one leg failing (e.g. no ETH for GMX's keeper
+  // fee) skips gracefully and the rest still land. Then we show "what AXIS did".
+  const onApplyRoute = async () => {
+    if (!userId || !session.uaAddress) return;
+    if (!handsOff) {
+      toast.error("Turn on hands-off first", {
+        description: "Deposit once to enable AXIS to act without prompts.",
+      });
+      return;
+    }
+    setApplyingRoute(true);
+    setRouteSummary(null);
+    try {
+      const result = await applyRoute.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        exclude_venues: excludeVenues,
+      });
+      setRouteSummary({ applied: result.applied, skipped: result.skipped });
+
+      if (result.applied.length > 0) {
+        toast.success("AXIS put your money to work", {
+          description: `${result.applied.length} venue${
+            result.applied.length > 1 ? "s" : ""
+          } funded — no signing.${
+            result.skipped.length ? ` ${result.skipped.length} skipped.` : ""
+          }`,
+        });
+      } else {
+        toast.info("Nothing was applied", {
+          description: (result.explanation || "No eligible venues right now.").slice(0, 160),
+        });
+      }
+      route.refetch();
+    } catch (e) {
+      toast.error("Couldn't apply route", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    } finally {
+      setApplyingRoute(false);
     }
   };
 
@@ -614,6 +806,241 @@ function Dashboard() {
                 </div>
               </div>
 
+              {/* Smart route — best-yield router across every venue */}
+              {route.data && (
+                <div className="border border-white/10 p-5 sm:p-6 mb-6">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 mb-2">
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 inline-flex items-center gap-2 truncate">
+                      <Layers size={13} strokeWidth={1.75} /> Smart route · best yield now
+                    </span>
+                    <button
+                      onClick={() => route.refetch()}
+                      disabled={route.isFetching}
+                      className="text-[10px] uppercase tracking-widest text-white/50 hover:text-white border border-white/15 rounded-full px-3 py-1 disabled:opacity-50 shrink-0"
+                    >
+                      {route.isFetching ? "Scanning…" : "Re-scan"}
+                    </button>
+                  </div>
+                  <p className="text-sm text-white/60 leading-relaxed">
+                    AXIS scans Aave, the Uniswap stable LP and the GMX pool, then routes your money to
+                    the best risk-adjusted mix — no signing.
+                  </p>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div className="border border-white/10 rounded-lg py-2">
+                      <p className="text-[9px] uppercase tracking-widest text-white/40">Blended APY</p>
+                      <p className="text-lg tracking-[-0.03em] text-[color:var(--color-lime)]">
+                        {route.data.route.blended_apy.toFixed(2)}%
+                      </p>
+                    </div>
+                    <div className="border border-white/10 rounded-lg py-2">
+                      <p className="text-[9px] uppercase tracking-widest text-white/40">Deploying</p>
+                      <p className="text-lg tracking-[-0.03em]">
+                        ${route.data.route.deployed_usdc.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="border border-white/10 rounded-lg py-2">
+                      <p className="text-[9px] uppercase tracking-widest text-white/40">~ / week</p>
+                      <p className="text-lg tracking-[-0.03em]">
+                        ${route.data.route.estimated_weekly_yield_usdc.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* What AXIS sees in your wallet (balance-aware routing) */}
+                  {route.data.balances && (
+                    <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40">
+                      In your wallet · ${route.data.balances.usdc.toFixed(2)} USDC
+                      {route.data.balances.usdt > 0.01 &&
+                        ` · $${route.data.balances.usdt.toFixed(2)} USDT`}
+                      {` · ${route.data.balances.eth.toFixed(4)} ETH`}
+                    </p>
+                  )}
+
+                  {route.data.projected && (
+                    <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40">
+                      Projection · add USDC to your wallet to route it live (idle: $
+                      {route.data.idle_usdc.toFixed(2)})
+                    </p>
+                  )}
+
+                  {/* Power-user venue toggles — only when market venues are unlocked */}
+                  {route.data.market_risk_ok && (
+                    <div className="mt-4">
+                      <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                        Venues · tap to include / exclude
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { venue: "uniswap_lp", label: "Stable LP" },
+                          { venue: "gmx_gm", label: "GMX" },
+                        ].map(({ venue, label }) => {
+                          const on = !excludeVenues.includes(venue);
+                          return (
+                            <button
+                              key={venue}
+                              onClick={() => toggleVenue(venue)}
+                              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest rounded-full border transition-colors ${
+                                on
+                                  ? "bg-white text-black border-white"
+                                  : "border-white/20 text-white/40"
+                              }`}
+                            >
+                              {label} · {on ? "on" : "off"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {!route.data.gmx_fundable && !excludeVenues.includes("gmx_gm") && (
+                        <p className="mt-2 text-[10px] text-white/40 leading-relaxed">
+                          GMX needs ~{route.data.gmx_fee_eth.toFixed(4)} ETH for its keeper fee — add
+                          a little ETH to include it, or AXIS will route around it automatically.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Live venue ranking */}
+                  <div className="mt-5">
+                    <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                      Live yields
+                    </p>
+                    <div className="space-y-1.5">
+                      {[...route.data.route.quotes]
+                        .sort((a, b) => b.apy - a.apy)
+                        .map((q) => (
+                          <div
+                            key={q.venue}
+                            className="flex items-center justify-between gap-2 text-xs"
+                          >
+                            <span className="text-white/70 truncate">{venueLabel(q.venue)}</span>
+                            <span className="inline-flex items-center gap-2 shrink-0">
+                              <span
+                                className={`text-[9px] uppercase tracking-widest rounded-full px-2 py-0.5 border ${riskChip(q.risk_tier)}`}
+                              >
+                                {riskLabel(q.risk_tier)}
+                              </span>
+                              {q.eligible ? (
+                                <span className="text-white/80 tabular-nums w-14 text-right">
+                                  {q.apy > 0 ? `${q.apy.toFixed(2)}%` : "—"}
+                                </span>
+                              ) : (
+                                <span className="text-white/30 w-14 text-right">Locked</span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Recommended split */}
+                  <div className="mt-5">
+                    <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                      Recommended split
+                    </p>
+                    <div className="space-y-1.5">
+                      {route.data.route.legs.map((leg) => (
+                        <div
+                          key={leg.venue}
+                          className="flex items-center justify-between gap-2 text-xs"
+                        >
+                          <span className="text-white/70 truncate">{venueLabel(leg.venue)}</span>
+                          <span className="inline-flex items-center gap-3 shrink-0 tabular-nums">
+                            <span className="text-white/40">
+                              {Math.round(leg.share_of_deployed * 100)}%
+                            </span>
+                            <span className="text-white">${leg.amount_usdc.toFixed(2)}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {route.data.route.legs.length > 0 && (
+                    <>
+                      <button
+                        onClick={onApplyRoute}
+                        disabled={applyingRoute || !handsOff || route.data.projected}
+                        className="mt-5 w-full bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {applyingRoute
+                          ? "AXIS is putting it to work…"
+                          : !handsOff
+                            ? "Turn on hands-off to apply"
+                            : route.data.projected
+                              ? "Add USDC to apply"
+                              : "Apply best route"}
+                      </button>
+                      <p className="mt-2 text-center text-[10px] text-white/30">
+                        One tap · no signing · gas on us
+                      </p>
+                      {!route.data.market_risk_ok && isAggressive && (
+                        <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40">
+                          Unlock higher-yield venues in the stable LP card below.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {routeSummary &&
+                    (routeSummary.applied.length > 0 || routeSummary.skipped.length > 0) && (
+                      <div className="mt-4 border-t border-white/10 pt-4">
+                        <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                          What AXIS did
+                        </p>
+                        <div className="space-y-1.5">
+                          {routeSummary.applied.map((a) => (
+                            <div
+                              key={a.tx_hash}
+                              className="flex items-center justify-between gap-2 text-xs"
+                            >
+                              <span className="inline-flex items-center gap-2 text-white/80 truncate">
+                                <Check
+                                  size={12}
+                                  strokeWidth={2}
+                                  className="text-[color:var(--color-lime)] shrink-0"
+                                />
+                                {venueLabel(a.venue)}
+                              </span>
+                              <span className="inline-flex items-center gap-3 shrink-0 tabular-nums">
+                                <span className="text-white">${a.amount_usdc.toFixed(2)}</span>
+                                <a
+                                  href={`https://arbiscan.io/tx/${a.tx_hash}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-white/40 underline decoration-white/20 hover:text-white/70"
+                                >
+                                  tx
+                                </a>
+                              </span>
+                            </div>
+                          ))}
+                          {routeSummary.skipped.map((s, i) => (
+                            <div
+                              key={`skip-${i}`}
+                              className="flex items-center justify-between gap-2 text-xs"
+                            >
+                              <span className="inline-flex items-center gap-2 text-white/40 truncate">
+                                <X size={12} strokeWidth={2} className="shrink-0" />
+                                {venueLabel(s.venue)}
+                              </span>
+                              <span className="text-white/30 shrink-0 tabular-nums">
+                                ${s.amount_usdc.toFixed(2)} skipped
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {routeSummary.skipped.length > 0 && (
+                          <p className="mt-2 text-[10px] text-white/30 leading-relaxed">
+                            Skipped legs usually just need a little ETH for GMX's keeper fee — the
+                            rest still went through.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                </div>
+              )}
+
               {/* Strategy — change any time */}
               <div className="border border-white/10 p-5 sm:p-6">
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 mb-2">
@@ -715,6 +1142,124 @@ function Dashboard() {
                     {saveCustom.isPending ? "Saving…" : "Save my mix"}
                   </button>
                 </div>
+
+                {/* Uniswap V3 USDC/USDT stable LP — Bold tier, market-risk (opt-in) */}
+                {isAggressive && (
+                  <div className="mt-6 pt-6 border-t border-white/10">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1">
+                      <p className="text-[10px] uppercase tracking-widest text-white/40 inline-flex items-center gap-2 truncate">
+                        <Zap size={12} strokeWidth={1.75} /> Stable LP · higher yield
+                      </p>
+                      <span className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">
+                        Uniswap V3 · USDC/USDT
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      Earn trading fees by providing USDC/USDT liquidity. Both sides are stablecoins
+                      and the position is always minted to you. Unlike plain lending, this carries a
+                      little market risk, so it needs your one-time OK.
+                    </p>
+
+                    {!marketRiskOn ? (
+                      <button
+                        onClick={onEnableLp}
+                        disabled={enableLp.isPending || !session.uaAddress}
+                        className="mt-4 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] hover:bg-[color:var(--color-lime)]/10 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {enableLp.isPending ? "Confirm in wallet…" : "I understand — unlock stable LP"}
+                      </button>
+                    ) : (
+                      <>
+                        <div className="mt-4 flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-widest text-white/40">
+                            USDC
+                          </span>
+                          <input
+                            type="number"
+                            min={2}
+                            step={1}
+                            value={lpAmount || ""}
+                            placeholder="Auto"
+                            onChange={(e) => setLpAmount(Number(e.target.value))}
+                            className="w-28 bg-transparent border border-white/20 rounded-full px-4 py-2 text-sm outline-none focus:border-white/40"
+                            aria-label="USDC amount for stable LP"
+                          />
+                          <span className="text-[10px] uppercase tracking-widest text-white/30">
+                            leave blank = suggested
+                          </span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={onOpenLp}
+                            disabled={openLp.isPending || !handsOff}
+                            className="bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                          >
+                            {openLp.isPending ? "AXIS is opening it…" : "Open stable LP"}
+                          </button>
+                          <button
+                            onClick={onCloseLp}
+                            disabled={closeLp.isPending || !handsOff}
+                            className="border border-white/20 hover:bg-white/5 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                          >
+                            {closeLp.isPending ? "AXIS is closing it…" : "Close LP"}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* GMX V2 GM pool — signing-free market-risk action (opt-in) */}
+                {isAggressive && marketRiskOn && (
+                  <div className="mt-6 pt-6 border-t border-white/10">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1">
+                      <p className="text-[10px] uppercase tracking-widest text-white/40 inline-flex items-center gap-2 truncate">
+                        <Zap size={12} strokeWidth={1.75} /> GMX pool · higher yield
+                      </p>
+                      <span className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">
+                        GMX V2 · ETH/USD
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      Provide liquidity to GMX's ETH/USD pool for a higher, variable yield. AXIS does
+                      it for you — no signing. Gas is on us; GMX's small network keeper fee comes from
+                      a little ETH in your wallet (excess refunded). It carries real market risk — the
+                      value moves with the pool — and funds are always returned to you.
+                    </p>
+                    <div className="mt-4 flex items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-widest text-white/40">USDC</span>
+                      <input
+                        type="number"
+                        min={5}
+                        step={1}
+                        value={gmxAmount || ""}
+                        placeholder="Auto"
+                        onChange={(e) => setGmxAmount(Number(e.target.value))}
+                        className="w-28 bg-transparent border border-white/20 rounded-full px-4 py-2 text-sm outline-none focus:border-white/40"
+                        aria-label="USDC amount for GMX GM pool"
+                      />
+                      <span className="text-[10px] uppercase tracking-widest text-white/30">
+                        leave blank = suggested
+                      </span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={onDepositGmx}
+                        disabled={depositGmx.isPending || !handsOff}
+                        className="bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {depositGmx.isPending ? "AXIS is adding it…" : "Add to GMX pool"}
+                      </button>
+                      <button
+                        onClick={onWithdrawGmx}
+                        disabled={withdrawGmx.isPending || !handsOff}
+                        className="border border-white/20 hover:bg-white/5 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {withdrawGmx.isPending ? "AXIS is closing it…" : "Close GMX"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

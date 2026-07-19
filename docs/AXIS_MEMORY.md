@@ -1,6 +1,6 @@
 # AXIS — Project Memory (Living Document)
 
-> **Last updated:** 2026-07-18  
+> **Last updated:** 2026-07-19  
 > **Production truth:** `docs/PRODUCTION_AUDIT.md`  
 > **Corrections to old guide:** `docs/AXIS_FACT_CHECK.md`  
 > **Do not** treat `AXIS_BUILD_GUIDE.md` as current.
@@ -52,6 +52,83 @@ Google sign-in → Magic embedded wallet → Particle UA (EIP-7702) → ZeroDev 
 - E2E user flow: Google login → session approval → real Aave USDC supply/withdraw tx on Arbiscan (audit tests #2–#5). Needs funded Magic wallet. (Paymaster sponsorship itself already proven above.)
 - `/tmp` SQLite is ephemeral (session approvals reset on cold start) → move to Postgres for durable hands-off.
 - Rotate all keys pasted in chat (agent key is a Sepolia testnet key reused as mainnet session signer — fine as gasless signer holding no funds, but rotate anyway).
+
+---
+
+## 2026-07-18 — Every strategy is signing-free (product law)
+
+**Core rule (non-negotiable):** after Google sign-in, the user NEVER signs a
+transaction. They deposit, tap "Begin", and the AXIS session key executes
+everything gaslessly. Signing prompts are for web3 devs, not consumers.
+
+- The account is **not USDC-only**. It's a normal Kernel (7702) smart account —
+  it can hold/receive/send native ETH, USDT, and any Arbitrum token; USDC is just
+  the asset the *session policy* is scoped around for lending.
+- **Gas** is paymaster-sponsored for all session actions. The only thing the
+  paymaster can't pay is a *protocol's own* fee (e.g. GMX's native ETH keeper
+  fee) — that comes from a little ETH the user keeps in their account. Still no
+  signing; we just don't "sponsor GMX's fee".
+
+### Signing-free strategy set (all via the session key, funds pinned to owner)
+| Venue | Path | Risk gate | Notes |
+|-------|------|-----------|-------|
+| Aave V3 | approve → supply(onBehalfOf=owner) / withdraw(to=owner) | always on | USDC lending |
+| Uniswap V3 | USDC/USDT full-range LP (swap+mint+decrease/collect/burn) | Aggressive + one-time market-risk consent | recipient pinned @ offsets |
+| **GMX V2 GM** | approve+sendWnt+sendTokens+createDeposit/createWithdrawal as **individual** calls (NOT GMX multicall) in one UserOp | Aggressive + consent + hands-off | receiver/market pinned; keeper ETH fee from user's own ETH; sendWnt value capped 0.01 ETH |
+
+**GMX correction (superseded "Pro, user-signed"):** GMX is now fully signing-free.
+Because we execute the sub-calls individually (not via GMX's `multicall`),
+`createDeposit`/`createWithdrawal` are direct calls, so the session `CallPolicy`
+pins `receiver`=owner and `market`=GM ETH/USD at fixed offsets. Offsets locked in
+`backend/services/gmx_gm.py` + `backend/tests/test_gmx_gm.py` and mirrored in
+`src/lib/kernel-session.ts`:
+- deposit: receiver @224, market @320
+- withdraw: receiver @256, market @352
+GMX deposits/withdrawals are keeper-settled (async), so we verify the create tx
+and reconcile the GM balance from chain.
+
+### Best-yield router + one-tap apply (BUILT — 2026-07-19)
+- `backend/services/yield_router.py`: scans live APYs across Aave USDC/USDT,
+  Uniswap V3 LP, GMX V2 GM concurrently and builds ONE risk-adjusted `RoutePlan`
+  for the user's profile + idle funds. Respects the cash buffer, gates the market
+  sleeve (LP+GMX) behind Aggressive+consent, caps GMX exposure, and **folds** any
+  below-minimum sleeve back into the stable core (safe for $10 deposits).
+- **Stable core is USDC-only** for execution: only Aave USDC is in the session
+  policy (USDT supply isn't), so the gasless core stays in USDC. Aave USDT APY is
+  still fetched and shown for comparison, never allocated. Tests in
+  `backend/tests/test_yield_router.py` lock this (17 pass w/ gmx).
+- Endpoints: `POST /agent/route/preview` (recommendation) and the one-tap
+  `POST /agent/route/apply/prepare` (recompute route from idle USDC → session
+  calls **grouped per venue**) + `POST /agent/route/apply/confirm` (verify each
+  leg on-chain, log per-venue position). Aave supply-of-exact-amount added via
+  `aave_transactions.build_supply_calls`.
+- Frontend one-tap: `applyRouteViaSession` (`src/lib/wallet.ts`) runs each venue
+  group as its own gasless UserOp in order (Aave core first, then LP, then GMX),
+  **graceful-skips** any leg that can't land (e.g. no ETH for GMX keeper fee), and
+  confirms only what executed. Dashboard "Smart route" card → single **"Apply best
+  route"** button + a **"What AXIS did"** summary (applied legs w/ Arbiscan tx +
+  skipped legs). Hook `useApplyRoute`.
+
+### Balance-aware routing + power-user venue toggles (2026-07-19)
+- **Balance-aware:** preview + `route/apply/prepare` now read the account's real
+  holdings via `_read_wallet_balances` → `{usdc, usdt, eth}` (`get_native_balance_wei`
+  added to `aave_transactions.py`; USDT/ETH are ERC20/native reads). GMX needs the
+  user's OWN ETH for the keeper fee, so `_gmx_fundability(eth)` compares balance vs
+  `estimate_execution_fee_wei()`. If ETH is short, apply **pre-skips GMX** (adds it
+  to `exclude_venues`, folds its share into stable/LP) and returns `pre_skipped` so
+  the tap never attempts an unfundable leg. Response carries `balances`,
+  `gmx_fundable`, `gmx_fee_eth`. Dashboard shows "In your wallet · $X USDC · Y ETH".
+- **USDT reality:** USDT balance is *surfaced* but not auto-deployed — session policy
+  has no gasless USDT-supply path (Aave USDC only; LP swaps USDC→USDT internally).
+- **Power-user toggles:** `exclude_venues: list[str]` on preview + apply flows through
+  `route_best_yield`/`build_route(exclude_venues=...)`; excluded market venues are
+  treated ineligible and fold back to the stable core (stable core can't be excluded).
+  Dashboard renders "Stable LP · on/off" + "GMX · on/off" chips (visible once market
+  risk is unlocked). New users just tap "Apply best route"; power users flip venues.
+  Locked behind Aggressive + market-risk consent as before.
+- **vault.tsx bug fixed:** GMX APY query called `axisApi.yields.gmx` (uncalled) →
+  always "—". Now `axisApi.yields.gmx()` reading `top_market_apy`/`apy`.
+- Router tests extended (19 pass) to lock exclude-venue folding.
 
 ---
 

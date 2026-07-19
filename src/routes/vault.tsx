@@ -35,12 +35,12 @@ function VaultPage() {
 
   const { data: aaveUsdc } = useQuery({ queryKey: ["yield", "aave", "USDC"], queryFn: () => axisApi.yields.aave("USDC") });
   const { data: aaveEth } = useQuery({ queryKey: ["yield", "aave", "ETH"], queryFn: () => axisApi.yields.aave("ETH") });
-  const { data: gmx } = useQuery({ queryKey: ["yield", "gmx"], queryFn: () => axisApi.yields.gmx });
+  const { data: gmx } = useQuery({ queryKey: ["yield", "gmx"], queryFn: () => axisApi.yields.gmx() });
 
   const apyMap: Record<string, number> = {
     "aave-usdc": Number(aaveUsdc?.supply_apy ?? 0),
     "aave-eth": Number(aaveEth?.supply_apy ?? 0),
-    "gmx-glp": Number(gmx?.apy ?? 0),
+    "gmx-glp": Number((gmx?.top_market_apy as number) ?? (gmx?.apy as number) ?? 0),
   };
 
   const items = useMemo(

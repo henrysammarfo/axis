@@ -31,6 +31,8 @@ class User(Base):
     session_active: Mapped[bool] = mapped_column(default=False)
     # Power-user custom strategy (allowlisted legs + weights), JSON-encoded.
     custom_strategy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # One-time explicit consent for market-risk positions (Uniswap V3 LP).
+    market_risk_consent: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

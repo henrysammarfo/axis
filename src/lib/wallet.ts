@@ -19,6 +19,7 @@ import { OAuthExtension } from "@magic-ext/oauth2";
 import { EVMExtension } from "@magic-ext/evm";
 import type { MagicUserMetadata } from "@magic-sdk/types";
 import { axisApi } from "./api";
+import type { RouteApplyLeg } from "./api";
 import {
   arbitrumChainId,
   ARBITRUM_ONE_CHAIN_ID,
@@ -907,6 +908,293 @@ export async function rebalanceViaSession(body: {
     instruction: body.instruction,
     tx_hash: result.tx_hash,
     actions: prepared.actions ?? [],
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
+/**
+ * Enable the market-risk (Uniswap V3 stable LP) path. Rebuilds the session
+ * approval WITH the LP permissions baked in — one Magic signature — and records
+ * the user's one-time consent. The LP recipient is pinned to the user on-chain.
+ */
+export async function enableMarketRiskSession(userId: string, uaAddress: string): Promise<void> {
+  if (!isArbitrumOne()) {
+    throw new Error("The stable LP is available on Arbitrum One only.");
+  }
+  const magic = getMagic();
+  await magic.evm.switchChain(ARBITRUM_ONE_CHAIN_ID);
+  const provider = magic.rpcProvider as {
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+
+  const { address: sessionSignerAddress } = await getSessionSignerAddress();
+  const approval = await buildSessionApproval({
+    magicProvider: provider,
+    ownerAddress: uaAddress,
+    sessionSignerAddress,
+    includeMarketRisk: true,
+  });
+
+  await axisApi.enableSession({
+    user_id: userId,
+    ua_address: uaAddress,
+    approval,
+    session_signer: sessionSignerAddress,
+  });
+  await axisApi.setMarketRiskConsent({
+    user_id: userId,
+    ua_address: uaAddress,
+    consent: true,
+  });
+}
+
+/**
+ * Open a Uniswap V3 USDC/USDT stable LP via the session key (no prompts).
+ * Requires the market-risk session (see enableMarketRiskSession) to be active.
+ */
+export async function openLpViaSession(body: {
+  user_id: string;
+  ua_address: string;
+  usdc_amount?: number;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  const prepared = await axisApi.prepareLp(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not open the LP. Please try again.");
+  }
+
+  const confirmed = await axisApi.confirmLp({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    usdc_amount: prepared.usdc_amount,
+    tx_hash: result.tx_hash,
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
+/**
+ * Close the Uniswap V3 USDC/USDT stable LP via the session key (no prompts).
+ * Backend reads the live position on-chain and returns decrease/collect/burn calls;
+ * the agent executes them and funds return to the owner (recipient pinned on-chain).
+ */
+export async function closeLpViaSession(body: {
+  user_id: string;
+  ua_address: string;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  const prepared = await axisApi.prepareLpExit(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not close the LP. Please try again.");
+  }
+
+  const confirmed = await axisApi.confirmLpExit({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    tx_hash: result.tx_hash,
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
+/**
+ * Add USDC liquidity to the GMX ETH/USD GM pool via the session key — NO signing.
+ * The agent executes approve + sendWnt + sendTokens + createDeposit in one gasless
+ * UserOp (receiver pinned to the owner on-chain). Gas is sponsored; GMX's native
+ * ETH keeper fee is drawn from the account's own ETH balance (excess refunded).
+ * Requires the market-risk session (enableMarketRiskSession) to be active.
+ */
+export async function depositGmxViaSession(body: {
+  user_id: string;
+  ua_address: string;
+  usdc_amount?: number;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  if (!isArbitrumOne()) {
+    throw new Error("GMX is available on Arbitrum One only.");
+  }
+  const prepared = await axisApi.prepareGmxDeposit(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not add to GMX. Make sure you have a little ETH for the keeper fee.");
+  }
+
+  const confirmed = await axisApi.confirmGmxDeposit({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    usdc_amount: prepared.usdc_amount,
+    tx_hash: result.tx_hash,
+  });
+  return { ...confirmed, tx_hash: result.tx_hash };
+}
+
+export type RouteApplyResult = {
+  applied: Array<{
+    venue: string;
+    protocol: string;
+    asset: string;
+    amount_usdc: number;
+    tx_hash: string;
+  }>;
+  skipped: Array<{ venue: string; amount_usdc: number; reason: string }>;
+  explanation: string;
+};
+
+/**
+ * One-tap: apply the entire best-yield route via the session key — NO signing.
+ *
+ * Runs each venue group as its own gasless UserOp, in order (the stable Aave USDC
+ * core first, then the market sleeve). If a leg can't land (e.g. no ETH for the
+ * GMX keeper fee), it's skipped gracefully and the rest still go through — then we
+ * confirm only the legs that actually executed and return a "what AXIS did" summary.
+ */
+export async function applyRouteViaSession(body: {
+  user_id: string;
+  ua_address: string;
+  exclude_venues?: string[];
+}): Promise<RouteApplyResult> {
+  const prepared = await axisApi.prepareRouteApply(body);
+
+  // Venues the backend pre-skipped (e.g. GMX with no ETH for the keeper fee) so
+  // the tap never attempts a leg that can't settle.
+  const skipped: RouteApplyResult["skipped"] = (prepared.pre_skipped ?? []).map((s) => ({
+    venue: s.venue,
+    amount_usdc: 0,
+    reason: s.reason,
+  }));
+
+  if (prepared.status !== "pending_execution" || !prepared.groups?.length) {
+    return {
+      applied: [],
+      skipped,
+      explanation: prepared.explanation ?? "Nothing to apply right now.",
+    };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const executed: RouteApplyLeg[] = [];
+
+  for (const group of prepared.groups) {
+    try {
+      const result = await executeSessionCalls({
+        data: {
+          didToken,
+          calls: group.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+        },
+      });
+      if (result.success && result.tx_hash) {
+        executed.push({
+          venue: group.venue,
+          tx_hash: result.tx_hash,
+          amount_usdc: group.amount_usdc,
+          estimated_apy: group.estimated_apy,
+        });
+      } else {
+        skipped.push({ venue: group.venue, amount_usdc: group.amount_usdc, reason: "not confirmed" });
+      }
+    } catch (err) {
+      skipped.push({
+        venue: group.venue,
+        amount_usdc: group.amount_usdc,
+        reason: err instanceof Error ? err.message : "failed",
+      });
+    }
+  }
+
+  let applied: RouteApplyResult["applied"] = [];
+  let explanation = prepared.explanation;
+  if (executed.length) {
+    const confirmed = await axisApi.confirmRouteApply({
+      user_id: body.user_id,
+      ua_address: body.ua_address,
+      legs: executed,
+    });
+    applied = confirmed.applied;
+    explanation = confirmed.explanation;
+  }
+
+  return { applied, skipped, explanation };
+}
+
+/**
+ * Redeem the account's full GMX ETH/USD GM position back to the owner via the
+ * session key — NO signing. Same gasless flow as the deposit; the WETH leg comes
+ * back as native ETH and the USDC leg as USDC, both to the owner.
+ */
+export async function withdrawGmxViaSession(body: {
+  user_id: string;
+  ua_address: string;
+}): Promise<{ status: string; explanation: string; tx_hash?: string }> {
+  if (!isArbitrumOne()) {
+    throw new Error("GMX is available on Arbitrum One only.");
+  }
+  const prepared = await axisApi.prepareGmxWithdraw(body);
+  if (prepared.status !== "pending_execution" || !prepared.calls?.length) {
+    return { status: prepared.status, explanation: prepared.explanation };
+  }
+
+  const didToken = getStoredSession()?.didToken;
+  if (!didToken) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  const result = await executeSessionCalls({
+    data: {
+      didToken,
+      calls: prepared.calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? "0x0" })),
+    },
+  });
+  if (!result.success || !result.tx_hash) {
+    throw new Error("AXIS could not close GMX. Make sure you have a little ETH for the keeper fee.");
+  }
+
+  const confirmed = await axisApi.confirmGmxWithdraw({
+    user_id: body.user_id,
+    ua_address: body.ua_address,
+    tx_hash: result.tx_hash,
   });
   return { ...confirmed, tx_hash: result.tx_hash };
 }
