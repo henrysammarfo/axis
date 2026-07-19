@@ -44,6 +44,7 @@ import {
   useRebalanceAxis,
   useRebalanceViaSession,
   useSaveCustomStrategy,
+  useEnableHandsOff,
   useEnableMarketRiskSession,
   useOpenLpViaSession,
   useCloseLpViaSession,
@@ -175,6 +176,7 @@ function Dashboard() {
   const rebalanceMutation = useRebalanceAxis();
   const sessionRebalance = useRebalanceViaSession();
   const saveCustom = useSaveCustomStrategy();
+  const enableHandsOff = useEnableHandsOff();
   const enableLp = useEnableMarketRiskSession();
   const openLp = useOpenLpViaSession();
   const closeLp = useCloseLpViaSession();
@@ -184,6 +186,7 @@ function Dashboard() {
   const route = useRoutePreview(userId, session.uaAddress, excludeVenues);
   const applyRoute = useApplyRoute();
   const [applyingRoute, setApplyingRoute] = useState(false);
+  const [enablingHandsOff, setEnablingHandsOff] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
   const toggleVenue = (venue: string) =>
@@ -552,6 +555,28 @@ function Dashboard() {
     }
   };
 
+  // One-tap: grant AXIS the session key (one Magic signature). No deposit needed —
+  // after this, Apply / Begin / LP / GMX all run without further prompts.
+  const onEnableHandsOff = async () => {
+    if (!userId || !session.uaAddress) return;
+    setEnablingHandsOff(true);
+    try {
+      await enableHandsOff.mutateAsync({
+        user_id: userId,
+        ua_address: session.uaAddress,
+      });
+      toast.success("Hands-off is on", {
+        description: "AXIS can invest and rebalance for you — no more wallet popups.",
+      });
+    } catch (e) {
+      toast.error("Couldn't turn on hands-off", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    } finally {
+      setEnablingHandsOff(false);
+    }
+  };
+
   // One-tap: apply the ENTIRE best route (stable Aave core + market sleeve) via the
   // session key — no signing. The backend groups the calls per venue; each group
   // runs as its own gasless UserOp so one leg failing (e.g. no ETH for GMX's keeper
@@ -559,9 +584,8 @@ function Dashboard() {
   const onApplyRoute = async () => {
     if (!userId || !session.uaAddress) return;
     if (!handsOff) {
-      toast.error("Turn on hands-off first", {
-        description: "Deposit once to enable AXIS to act without prompts.",
-      });
+      // The button itself is the on-ramp — grant the session, then they tap Apply.
+      await onEnableHandsOff();
       return;
     }
     setApplyingRoute(true);
@@ -814,7 +838,7 @@ function Dashboard() {
                       . Add some USDC to your address below, then tap Begin.{" "}
                       {handsOff
                         ? "Hands-off mode is on — AXIS invests with zero popups."
-                        : "You'll okay AXIS once, then it invests and rebalances for you — no more wallet popups."}
+                        : "Or turn on hands-off first (one okay), then Begin — no more wallet popups after that."}
                     </p>
                     <button
                       onClick={onDeploy}
@@ -1121,19 +1145,25 @@ function Dashboard() {
                     <>
                       <button
                         onClick={onApplyRoute}
-                        disabled={applyingRoute || !handsOff || route.data.projected}
-                        className="mt-5 w-full bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                        disabled={
+                          applyingRoute || enablingHandsOff || (handsOff && route.data.projected)
+                        }
+                        className="mt-5 w-full bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50 cursor-pointer"
                       >
-                        {applyingRoute
-                          ? "AXIS is putting it to work…"
-                          : !handsOff
-                            ? "Turn on hands-off to apply"
-                            : route.data.projected
-                              ? "Add USDC to apply"
-                              : "Apply best route"}
+                        {enablingHandsOff
+                          ? "Okay AXIS in your wallet…"
+                          : applyingRoute
+                            ? "AXIS is putting it to work…"
+                            : !handsOff
+                              ? "Turn on hands-off to apply"
+                              : route.data.projected
+                                ? "Add USDC to apply"
+                                : "Apply best route"}
                       </button>
                       <p className="mt-2 text-center text-[10px] text-white/30">
-                        One tap · no signing · gas on us
+                        {!handsOff
+                          ? "One signature · then AXIS acts for you"
+                          : "One tap · no signing · gas on us"}
                       </p>
                       {!route.data.market_risk_ok && isAggressive && (
                         <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40">
@@ -1207,10 +1237,19 @@ function Dashboard() {
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 mb-2">
                   <span className="text-[10px] sm:text-xs uppercase tracking-widest text-white/50 inline-flex items-center gap-2 truncate">
                     <Shield size={13} strokeWidth={1.75} /> Your strategy
-                    {handsOff && (
+                    {handsOff ? (
                       <span className="inline-flex items-center gap-1 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] rounded-full px-2 py-0.5 text-[9px]">
                         <Zap size={10} strokeWidth={2} /> Hands-off on
                       </span>
+                    ) : (
+                      <button
+                        onClick={onEnableHandsOff}
+                        disabled={enablingHandsOff || !session.uaAddress}
+                        className="inline-flex items-center gap-1 border border-white/25 text-white/70 hover:border-[color:var(--color-lime)]/50 hover:text-[color:var(--color-lime)] rounded-full px-2 py-0.5 text-[9px] disabled:opacity-50 cursor-pointer"
+                      >
+                        <Zap size={10} strokeWidth={2} />
+                        {enablingHandsOff ? "Turning on…" : "Turn on hands-off"}
+                      </button>
                     )}
                   </span>
                   <span className="text-xl sm:text-2xl tracking-[-0.04em] shrink-0">
@@ -1221,6 +1260,21 @@ function Dashboard() {
                   Switch your vibe any time. AXIS adjusts how it invests — safer, balanced, or going
                   for max returns.
                 </p>
+                {!handsOff && (
+                  <div className="mt-4 border border-[color:var(--color-lime)]/25 bg-[color:var(--color-lime)]/5 rounded-md p-4">
+                    <p className="text-sm text-white/80 leading-relaxed">
+                      Turn on hands-off once — AXIS gets a limited key so it can invest and
+                      rebalance for you with no more signing. You can do this before depositing.
+                    </p>
+                    <button
+                      onClick={onEnableHandsOff}
+                      disabled={enablingHandsOff || !session.uaAddress}
+                      className="mt-3 bg-[color:var(--color-lime)] text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest font-medium disabled:opacity-50 cursor-pointer"
+                    >
+                      {enablingHandsOff ? "Okay AXIS in your wallet…" : "Turn on hands-off"}
+                    </button>
+                  </div>
+                )}
 
                 <div className="mt-4">
                   <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">Risk</p>

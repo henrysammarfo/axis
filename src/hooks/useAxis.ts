@@ -3,6 +3,7 @@ import { axisApi } from "../lib/api";
 import {
   deployStrategy,
   rebalanceViaSession,
+  enableHandsOff,
   enableMarketRiskSession,
   openLpViaSession,
   closeLpViaSession,
@@ -147,6 +148,18 @@ export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: axisApi.updateProfile,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
+    },
+  });
+}
+
+/** One-tap: grant the AXIS session key (hands-off). No deposit required. */
+export function useEnableHandsOff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { user_id: string; ua_address: string }) =>
+      enableHandsOff(vars.user_id, vars.ua_address),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["axis", "status", vars.user_id] });
     },

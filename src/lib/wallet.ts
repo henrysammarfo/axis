@@ -772,6 +772,21 @@ export async function ensureSessionApproval(
 }
 
 /**
+ * Explicit one-tap: grant AXIS the policy-bounded session key (one Magic
+ * signature). Does not deposit anything — just turns hands-off on so later
+ * Begin / Apply / LP / GMX moves are prompt-free.
+ */
+export async function enableHandsOff(userId: string, uaAddress: string): Promise<void> {
+  if (!isArbitrumOne()) {
+    throw new Error("Hands-off mode runs on Arbitrum One. Switch network and try again.");
+  }
+  const approval = await ensureSessionApproval(userId, uaAddress);
+  if (!approval) {
+    throw new Error("Couldn't turn on hands-off. Please try again.");
+  }
+}
+
+/**
  * Deploy the locked plan. When a session key is active, USDC Aave legs execute
  * gaslessly through the agent (zero prompts). Any USDT swap legs fall back to a
  * single Magic signature. Never fakes success — throws on underfunding or revert.
@@ -863,7 +878,7 @@ export async function rebalanceViaSession(body: {
 
   const approval = await ensureSessionApproval(body.user_id, body.ua_address);
   if (!approval) {
-    throw new Error("Turn on hands-off mode first by depositing once.");
+    throw new Error("Turn on hands-off first — tap Turn on hands-off on the dashboard.");
   }
   const didToken = getStoredSession()?.didToken;
   if (!didToken) {
