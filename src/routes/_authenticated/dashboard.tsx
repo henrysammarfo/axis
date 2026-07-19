@@ -307,6 +307,13 @@ function Dashboard() {
     if (!userId || !session.uaAddress) return;
     setDeploying(true);
     try {
+      const ready = await ensureHandsOffSilent();
+      if (!ready) {
+        toast.error("AXIS isn't ready yet", {
+          description: "Refresh the page and try again in a moment.",
+        });
+        return;
+      }
       const res = await deployMutation.mutateAsync({
         user_id: userId,
         budget_usdc: axisStatus?.budget_usdc || Number(budgetParam ?? budget),
@@ -555,23 +562,46 @@ function Dashboard() {
     }
   };
 
-  // One-tap: grant AXIS the session key (one Magic signature). No deposit needed —
-  // after this, Apply / Begin / LP / GMX all run without further prompts.
-  const onEnableHandsOff = async () => {
-    if (!userId || !session.uaAddress) return;
+  // Hands-off is granted at Google login (silent). If it wasn't ready yet, finish
+  // it here once — never ask the user to okay a wallet.
+  const handsOffBootstrapRef = useRef(false);
+  useEffect(() => {
+    if (!userId || !session.uaAddress || handsOff || handsOffBootstrapRef.current) return;
+    handsOffBootstrapRef.current = true;
+    let cancelled = false;
+    (async () => {
+      setEnablingHandsOff(true);
+      try {
+        await enableHandsOff.mutateAsync({
+          user_id: userId,
+          ua_address: session.uaAddress,
+        });
+      } catch {
+        handsOffBootstrapRef.current = false; // allow one retry on next Begin/Apply
+      } finally {
+        if (!cancelled) setEnablingHandsOff(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once per visit
+  }, [userId, session.uaAddress, handsOff]);
+
+  // Silently ready the agent if needed, then run the action. Never surfaces a
+  // "sign / okay in wallet" step — Google login is the only auth.
+  const ensureHandsOffSilent = async (): Promise<boolean> => {
+    if (handsOff) return true;
+    if (!userId || !session.uaAddress) return false;
     setEnablingHandsOff(true);
     try {
       await enableHandsOff.mutateAsync({
         user_id: userId,
         ua_address: session.uaAddress,
       });
-      toast.success("Hands-off is on", {
-        description: "AXIS can invest and rebalance for you — no more wallet popups.",
-      });
-    } catch (e) {
-      toast.error("Couldn't turn on hands-off", {
-        description: e instanceof Error ? e.message : "Please try again.",
-      });
+      return true;
+    } catch {
+      return false;
     } finally {
       setEnablingHandsOff(false);
     }
@@ -583,14 +613,16 @@ function Dashboard() {
   // fee) skips gracefully and the rest still land. Then we show "what AXIS did".
   const onApplyRoute = async () => {
     if (!userId || !session.uaAddress) return;
-    if (!handsOff) {
-      // The button itself is the on-ramp — grant the session, then they tap Apply.
-      await onEnableHandsOff();
-      return;
-    }
     setApplyingRoute(true);
     setRouteSummary(null);
     try {
+      const ready = await ensureHandsOffSilent();
+      if (!ready) {
+        toast.error("AXIS isn't ready yet", {
+          description: "Refresh the page and try again in a moment.",
+        });
+        return;
+      }
       const result = await applyRoute.mutateAsync({
         user_id: userId,
         ua_address: session.uaAddress,
@@ -602,9 +634,7 @@ function Dashboard() {
         toast.success("AXIS put your money to work", {
           description: `${result.applied.length} venue${
             result.applied.length > 1 ? "s" : ""
-          } funded — no signing.${
-            result.skipped.length ? ` ${result.skipped.length} skipped.` : ""
-          }`,
+          } funded.${result.skipped.length ? ` ${result.skipped.length} skipped.` : ""}`,
         });
       } else {
         toast.info("Nothing was applied", {
@@ -837,8 +867,8 @@ function Dashboard() {
                       </span>
                       . Add some USDC to your address below, then tap Begin.{" "}
                       {handsOff
-                        ? "Hands-off mode is on — AXIS invests with zero popups."
-                        : "Or turn on hands-off first (one okay), then Begin — no more wallet popups after that."}
+                        ? "Hands-off is on — AXIS invests with zero popups."
+                        : "AXIS is finishing setup in the background — then Begin puts your USDC to work."}
                     </p>
                     <button
                       onClick={onDeploy}
@@ -1145,25 +1175,17 @@ function Dashboard() {
                     <>
                       <button
                         onClick={onApplyRoute}
-                        disabled={
-                          applyingRoute || enablingHandsOff || (handsOff && route.data.projected)
-                        }
+                        disabled={applyingRoute || enablingHandsOff || route.data.projected}
                         className="mt-5 w-full bg-white text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50 cursor-pointer"
                       >
-                        {enablingHandsOff
-                          ? "Okay AXIS in your wallet…"
-                          : applyingRoute
-                            ? "AXIS is putting it to work…"
-                            : !handsOff
-                              ? "Turn on hands-off to apply"
-                              : route.data.projected
-                                ? "Add USDC to apply"
-                                : "Apply best route"}
+                        {enablingHandsOff || applyingRoute
+                          ? "AXIS is putting it to work…"
+                          : route.data.projected
+                            ? "Add USDC to apply"
+                            : "Apply best route"}
                       </button>
                       <p className="mt-2 text-center text-[10px] text-white/30">
-                        {!handsOff
-                          ? "One signature · then AXIS acts for you"
-                          : "One tap · no signing · gas on us"}
+                        One tap · no signing · gas on us
                       </p>
                       {!route.data.market_risk_ok && isAggressive && (
                         <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40">
@@ -1241,16 +1263,11 @@ function Dashboard() {
                       <span className="inline-flex items-center gap-1 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] rounded-full px-2 py-0.5 text-[9px]">
                         <Zap size={10} strokeWidth={2} /> Hands-off on
                       </span>
-                    ) : (
-                      <button
-                        onClick={onEnableHandsOff}
-                        disabled={enablingHandsOff || !session.uaAddress}
-                        className="inline-flex items-center gap-1 border border-white/25 text-white/70 hover:border-[color:var(--color-lime)]/50 hover:text-[color:var(--color-lime)] rounded-full px-2 py-0.5 text-[9px] disabled:opacity-50 cursor-pointer"
-                      >
-                        <Zap size={10} strokeWidth={2} />
-                        {enablingHandsOff ? "Turning on…" : "Turn on hands-off"}
-                      </button>
-                    )}
+                    ) : enablingHandsOff ? (
+                      <span className="inline-flex items-center gap-1 border border-white/20 text-white/50 rounded-full px-2 py-0.5 text-[9px]">
+                        Getting ready…
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-xl sm:text-2xl tracking-[-0.04em] shrink-0">
                     ${axisStatus?.budget_usdc ?? budget}
@@ -1260,21 +1277,6 @@ function Dashboard() {
                   Switch your vibe any time. AXIS adjusts how it invests — safer, balanced, or going
                   for max returns.
                 </p>
-                {!handsOff && (
-                  <div className="mt-4 border border-[color:var(--color-lime)]/25 bg-[color:var(--color-lime)]/5 rounded-md p-4">
-                    <p className="text-sm text-white/80 leading-relaxed">
-                      Turn on hands-off once — AXIS gets a limited key so it can invest and
-                      rebalance for you with no more signing. You can do this before depositing.
-                    </p>
-                    <button
-                      onClick={onEnableHandsOff}
-                      disabled={enablingHandsOff || !session.uaAddress}
-                      className="mt-3 bg-[color:var(--color-lime)] text-black rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest font-medium disabled:opacity-50 cursor-pointer"
-                    >
-                      {enablingHandsOff ? "Okay AXIS in your wallet…" : "Turn on hands-off"}
-                    </button>
-                  </div>
-                )}
 
                 <div className="mt-4">
                   <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">Risk</p>
@@ -1382,7 +1384,7 @@ function Dashboard() {
                         className="mt-4 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] hover:bg-[color:var(--color-lime)]/10 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
                       >
                         {enableLp.isPending
-                          ? "Confirm in wallet…"
+                          ? "Unlocking…"
                           : "I understand — unlock stable LP"}
                       </button>
                     ) : (

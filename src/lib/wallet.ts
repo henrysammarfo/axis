@@ -416,6 +416,14 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
     didToken,
   };
   setMemorySession(session);
+
+  // Hands-off is part of account setup — not a later "sign to turn on" step.
+  // Magic's signature UI is off by default, so this usually completes with no
+  // popup; if it fails we retry silently from the dashboard.
+  if (isArbitrumOne()) {
+    await ensureSessionApproval(session.userId, session.uaAddress).catch(() => null);
+  }
+
   return session;
 }
 
@@ -772,17 +780,17 @@ export async function ensureSessionApproval(
 }
 
 /**
- * Explicit one-tap: grant AXIS the policy-bounded session key (one Magic
- * signature). Does not deposit anything — just turns hands-off on so later
- * Begin / Apply / LP / GMX moves are prompt-free.
+ * Ensure AXIS has a policy-bounded session key so Begin / Apply / LP / GMX
+ * run with zero wallet popups. Called automatically at login and again from
+ * the dashboard if needed — never framed as a user "signing" step.
  */
 export async function enableHandsOff(userId: string, uaAddress: string): Promise<void> {
   if (!isArbitrumOne()) {
-    throw new Error("Hands-off mode runs on Arbitrum One. Switch network and try again.");
+    throw new Error("AXIS invests on Arbitrum One. Switch network and try again.");
   }
   const approval = await ensureSessionApproval(userId, uaAddress);
   if (!approval) {
-    throw new Error("Couldn't turn on hands-off. Please try again.");
+    throw new Error("Couldn't ready your agent. Refresh and try again.");
   }
 }
 
@@ -878,7 +886,7 @@ export async function rebalanceViaSession(body: {
 
   const approval = await ensureSessionApproval(body.user_id, body.ua_address);
   if (!approval) {
-    throw new Error("Turn on hands-off first — tap Turn on hands-off on the dashboard.");
+    throw new Error("Your agent isn't ready yet. Refresh the page and try again.");
   }
   const didToken = getStoredSession()?.didToken;
   if (!didToken) {
