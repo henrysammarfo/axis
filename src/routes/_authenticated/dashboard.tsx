@@ -660,10 +660,15 @@ function Dashboard() {
                     Setting up your agent…
                   </p>
                 )}
-                {axisReport?.report && (
-                  <p className="mt-4 text-sm text-white/70 leading-relaxed max-w-prose">
-                    {axisReport.report}
-                  </p>
+                {positions.length > 0 && axisReport?.report?.trim() && (
+                  <div className="mt-5 border border-white/10 rounded-md p-4 max-w-prose">
+                    <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                      Weekly note
+                    </p>
+                    <p className="text-sm text-white/70 leading-relaxed whitespace-pre-line">
+                      {axisReport.report.trim()}
+                    </p>
+                  </div>
                 )}
                 <div className="mt-6 h-20 sm:h-24 text-[color:var(--color-lime)]">
                   <Sparkline

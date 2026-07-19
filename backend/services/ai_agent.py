@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -117,21 +118,31 @@ class AxisAgent:
     async def generate_weekly_report(self, user_id: str) -> str:
         positions = await self.tracker.get_positions(user_id)
         history = await self.tracker.get_weekly_actions(user_id)
+
+        # Nothing to report yet — don't burn an AI call (and don't risk a reasoning
+        # model rambling). The dashboard shows its own "agent is ready" empty state.
+        if not positions and not history:
+            return ""
+
         prompt = f"""Write a weekly portfolio report for this user.
-Keep it under 150 words. Use plain English. No jargon.
-Format: what earned, what changed, what AXIS did, what's next.
+Keep it under 120 words. Use plain English. No jargon. No preamble.
+Reply with ONLY the report, in this format:
+What earned: ...
+What changed: ...
+What AXIS did: ...
+What's next: ...
 
 Current positions: {json.dumps(positions)}
 Actions this week: {json.dumps(history)}"""
 
         provider = self.settings.ai_provider
         if provider not in ("venice", "openai"):
-            return "Your Aave positions are open. Check the dashboard for live balances."
+            return "Your positions are open. Check the dashboard for live balances."
 
         try:
             return await self._chat_completion(prompt, provider, max_tokens=300)
         except Exception:
-            return "Your Aave positions are open. Check the dashboard for live balances."
+            return "Your positions are open. Check the dashboard for live balances."
 
     async def _execute_tool(self, tool_name: str, tool_input: dict, user_id: str) -> dict:
         session_user_id = self._session_user_id or user_id
@@ -182,14 +193,47 @@ Actions this week: {json.dumps(history)}"""
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        # Venice reasoning models otherwise return their chain-of-thought inline;
+        # ask Venice to strip it server-side (we also strip client-side below).
+        if provider == "venice":
+            payload["venice_parameters"] = {"strip_thinking_response": True}
+
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+                json=payload,
             )
             r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
+            content = r.json()["choices"][0]["message"].get("content") or ""
+            return self._strip_reasoning(content)
+
+    @staticmethod
+    def _strip_reasoning(text: str) -> str:
+        """Remove reasoning-model chain-of-thought so only the answer is shown.
+
+        Handles explicit <think>...</think> blocks and unclosed tags, then trims
+        any leading commentary before the real report (e.g. a model that narrates
+        "The user wants..." before the "What earned:" section).
+        """
+        if not text:
+            return ""
+        # Drop closed <think>/<reasoning> blocks and any unterminated opener.
+        text = re.sub(r"(?is)<(think|reasoning)>.*?</\1>", "", text)
+        text = re.sub(r"(?is)<(think|reasoning)>.*$", "", text)
+        text = re.sub(r"(?is)</?(think|reasoning)>", "", text).strip()
+        # If the report's structured section exists, start from there and drop any
+        # narration the model emitted before it.
+        marker = re.search(r"(?im)^\s*(what earned|weekly portfolio report)\b", text)
+        if marker:
+            text = text[marker.start() :]
+        text = re.sub(r"(?im)^\s*-{2,}\s*$", "", text)  # stray "---" separators
+        return text.strip()
 
     @staticmethod
     def _fallback_explanation(plan: AllocationPlan) -> str:
