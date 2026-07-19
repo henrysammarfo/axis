@@ -89,7 +89,8 @@ function riskLabel(tier: string): string {
 }
 function riskChip(tier: string): string {
   if (tier === "market") return "border-white/25 text-white/60";
-  if (tier === "stable-lp") return "border-[color:var(--color-lime)]/30 text-[color:var(--color-lime)]/80";
+  if (tier === "stable-lp")
+    return "border-[color:var(--color-lime)]/30 text-[color:var(--color-lime)]/80";
   return "border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)]";
 }
 
@@ -117,6 +118,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const;
+type Chain = "Arbitrum" | "Base" | "Optimism" | "Ethereum";
 const CHAINS: (Chain | "All")[] = ["All", "Arbitrum", "Base", "Optimism", "Ethereum"];
 
 function EmptyState({ message }: { message: string }) {
@@ -200,6 +202,10 @@ function Dashboard() {
   const [activating, setActivating] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [savingStrategy, setSavingStrategy] = useState(false);
+  // Optimistic selection so the pill highlights the instant you tap — we persist
+  // in the background and clear these once the server status catches up.
+  const [pendingRisk, setPendingRisk] = useState<RiskLevel | null>(null);
+  const [pendingGoal, setPendingGoal] = useState<GoalLabel | null>(null);
 
   const handsOff = Boolean(axisStatus?.session_active);
   const [usdcWeight, setUsdcWeight] = useState(60);
@@ -208,8 +214,11 @@ function Dashboard() {
   const marketRiskOn = Boolean(axisStatus?.market_risk_consent);
   const isAggressive = (axisStatus?.risk_level || "").toLowerCase() === "aggressive";
 
-  const activeRisk = (axisStatus?.risk_level || risk || "moderate") as RiskLevel;
-  const activeGoal = (axisStatus?.goal || goal || GOALS[0]) as GoalLabel;
+  const activeRisk = (pendingRisk ?? axisStatus?.risk_level ?? risk ?? "moderate") as RiskLevel;
+  const activeGoal = (pendingGoal ?? axisStatus?.goal ?? goal ?? GOALS[0]) as GoalLabel;
+  // Goal is stored as a free-form label; match case-insensitively so the pill
+  // still lights up when the server hands back "maximize yield" vs "Maximize yield".
+  const goalIsActive = (g: GoalLabel) => activeGoal.toLowerCase() === g.toLowerCase();
 
   const sra = axisStatus?.sra_address ?? session.sraAddress;
   const uaDisplay = axisStatus?.ua_address ?? session.uaAddress;
@@ -229,7 +238,10 @@ function Dashboard() {
         })
         .then((res) => {
           toast.success("AXIS is set up", {
-            description: (res.message || res.explanation || "Your strategy is saved.").slice(0, 160),
+            description: (res.message || res.explanation || "Your strategy is saved.").slice(
+              0,
+              160,
+            ),
           });
           navigate({
             search: (p) => ({
@@ -252,7 +264,10 @@ function Dashboard() {
 
   const onChangeStrategy = async (nextRisk: RiskLevel, nextGoal: GoalLabel) => {
     if (!userId || !session.uaAddress) return;
-    if (nextRisk === activeRisk && nextGoal === activeGoal) return;
+    if (nextRisk === activeRisk && goalIsActive(nextGoal)) return;
+    // Reflect the choice immediately, then persist in the background.
+    setPendingRisk(nextRisk);
+    setPendingGoal(nextGoal);
     setSavingStrategy(true);
     try {
       await activateMutation.mutateAsync({
@@ -267,6 +282,9 @@ function Dashboard() {
         description: `AXIS is now ${RISK_LABEL[nextRisk].toLowerCase()} · ${nextGoal.toLowerCase()}.`,
       });
     } catch (e) {
+      // Roll back the optimistic pills so the UI matches the saved strategy.
+      setPendingRisk(null);
+      setPendingGoal(null);
       toast.error("Couldn't update", {
         description: e instanceof Error ? e.message : "Try again in a moment.",
       });
@@ -274,6 +292,13 @@ function Dashboard() {
       setSavingStrategy(false);
     }
   };
+
+  // Clear the optimistic selection once the refreshed status matches it.
+  useEffect(() => {
+    if (pendingRisk && axisStatus?.risk_level === pendingRisk) setPendingRisk(null);
+    if (pendingGoal && (axisStatus?.goal ?? "").toLowerCase() === pendingGoal.toLowerCase())
+      setPendingGoal(null);
+  }, [axisStatus?.risk_level, axisStatus?.goal, pendingRisk, pendingGoal]);
 
   const onDeploy = async () => {
     if (!userId || !session.uaAddress) return;
@@ -355,6 +380,15 @@ function Dashboard() {
     () => (chain === "All" ? orders : orders.filter((o) => o.chain === chain)),
     [orders, chain],
   );
+  // Only offer chains the user actually has activity on, so the filter never
+  // shows a dead "Base / Optimism" tab that always resolves to an empty list.
+  const chainOptions = useMemo<(Chain | "All")[]>(() => {
+    const present = new Set<string>([
+      ...vaultRows.map((v) => v.chain),
+      ...orders.map((o) => o.chain),
+    ]);
+    return CHAINS.filter((c) => c === "All" || present.has(c));
+  }, [vaultRows, orders]);
 
   const totalBalance = s.totalAllocated;
   const weeklyYield = s.weeklyYield;
@@ -423,7 +457,8 @@ function Dashboard() {
     try {
       await enableLp.mutateAsync({ user_id: userId, ua_address: session.uaAddress });
       toast.success("Stable LP unlocked", {
-        description: "AXIS can now open a Uniswap USDC/USDT LP for you — funds stay in your wallet.",
+        description:
+          "AXIS can now open a Uniswap USDC/USDT LP for you — funds stay in your wallet.",
       });
     } catch (e) {
       toast.error("Couldn't unlock the LP", {
@@ -487,7 +522,9 @@ function Dashboard() {
     } catch (e) {
       toast.error("Couldn't add to GMX", {
         description:
-          e instanceof Error ? e.message : "Make sure you hold a little ETH for the fee, then retry.",
+          e instanceof Error
+            ? e.message
+            : "Make sure you hold a little ETH for the fee, then retry.",
       });
     }
   };
@@ -677,8 +714,8 @@ function Dashboard() {
                     Total balance
                   </span>
                   <span className="shrink-0 inline-flex items-center gap-1 text-[color:var(--color-lime)] text-xs sm:text-sm">
-                    <TrendingUp {...ICON} /> ~
-                    {weeklyYield.toFixed(2)} est. / week
+                    <TrendingUp {...ICON} /> ~$
+                    {weeklyYield.toFixed(2)} / week est.
                   </span>
                 </div>
                 <div className="text-[44px] sm:text-[64px] lg:text-[110px] leading-none tracking-[-0.05em]">
@@ -740,8 +777,8 @@ function Dashboard() {
                   )}
                 </div>
                 <p className="mt-1 text-[11px] text-white/40 max-w-prose">
-                  AXIS invests up to this amount — the rest of your balance stays in your
-                  wallet. You choose, it&apos;s never your whole balance.
+                  AXIS invests up to this amount — the rest of your balance stays in your wallet.
+                  You choose, it&apos;s never your whole balance.
                 </p>
 
                 {activating && (
@@ -762,9 +799,7 @@ function Dashboard() {
                 <div className="mt-6 h-20 sm:h-24 text-[color:var(--color-lime)]">
                   <Sparkline
                     points={
-                      positions.length
-                        ? positions.map((p) => Number(p.estimated_apy) || 0)
-                        : [0, 0]
+                      positions.length ? positions.map((p) => Number(p.estimated_apy) || 0) : [0, 0]
                     }
                   />
                 </div>
@@ -934,13 +969,15 @@ function Dashboard() {
                     </button>
                   </div>
                   <p className="text-sm text-white/60 leading-relaxed">
-                    AXIS scans Aave, the Uniswap stable LP and the GMX pool, then routes your money to
-                    the best risk-adjusted mix — no signing.
+                    AXIS scans Aave, the Uniswap stable LP and the GMX pool, then routes your money
+                    to the best risk-adjusted mix — no signing.
                   </p>
 
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                     <div className="border border-white/10 rounded-lg py-2">
-                      <p className="text-[9px] uppercase tracking-widest text-white/40">Blended APY</p>
+                      <p className="text-[9px] uppercase tracking-widest text-white/40">
+                        Blended APY
+                      </p>
                       <p className="text-lg tracking-[-0.03em] text-[color:var(--color-lime)]">
                         {route.data.route.blended_apy.toFixed(2)}%
                       </p>
@@ -975,8 +1012,8 @@ function Dashboard() {
                     <p className="mt-1 text-[10px] uppercase tracking-widest text-white/40">
                       Budget · ${route.data.deployed_usdc.toFixed(2)} used of $
                       {route.data.budget_usdc.toFixed(2)} · $
-                      {Math.max(0, route.data.budget_usdc - route.data.deployed_usdc).toFixed(2)} left
-                      in budget
+                      {Math.max(0, route.data.budget_usdc - route.data.deployed_usdc).toFixed(2)}{" "}
+                      left in budget
                     </p>
                   )}
 
@@ -1016,8 +1053,9 @@ function Dashboard() {
                       </div>
                       {!route.data.gmx_fundable && !excludeVenues.includes("gmx_gm") && (
                         <p className="mt-2 text-[10px] text-white/40 leading-relaxed">
-                          GMX needs ~{route.data.gmx_fee_eth.toFixed(4)} ETH for its keeper fee — add
-                          a little ETH to include it, or AXIS will route around it automatically.
+                          GMX needs ~{route.data.gmx_fee_eth.toFixed(4)} ETH for its keeper fee —
+                          add a little ETH to include it, or AXIS will route around it
+                          automatically.
                         </p>
                       )}
                     </div>
@@ -1191,11 +1229,11 @@ function Dashboard() {
                       <button
                         key={r}
                         onClick={() => onChangeStrategy(r, activeGoal)}
-                        disabled={savingStrategy}
-                        className={`flex-1 py-2 text-[10px] uppercase tracking-widest rounded-full border disabled:opacity-50 ${
+                        aria-pressed={activeRisk === r}
+                        className={`flex-1 py-2 text-[10px] uppercase tracking-widest rounded-full border transition-colors ${
                           activeRisk === r
                             ? "bg-white text-black border-white"
-                            : "border-white/20 text-white/70"
+                            : "border-white/20 text-white/70 hover:border-white/40 hover:text-white"
                         }`}
                       >
                         {RISK_LABEL[r]}
@@ -1211,11 +1249,11 @@ function Dashboard() {
                       <button
                         key={g}
                         onClick={() => onChangeStrategy(activeRisk, g)}
-                        disabled={savingStrategy}
-                        className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-full border disabled:opacity-50 ${
-                          activeGoal === g
+                        aria-pressed={goalIsActive(g)}
+                        className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-full border transition-colors ${
+                          goalIsActive(g)
                             ? "bg-white text-black border-white"
-                            : "border-white/20 text-white/70"
+                            : "border-white/20 text-white/70 hover:border-white/40 hover:text-white"
                         }`}
                       >
                         {g}
@@ -1289,7 +1327,9 @@ function Dashboard() {
                         disabled={enableLp.isPending || !session.uaAddress}
                         className="mt-4 border border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)] hover:bg-[color:var(--color-lime)]/10 rounded-full px-5 py-2.5 text-[10px] uppercase tracking-widest disabled:opacity-50"
                       >
-                        {enableLp.isPending ? "Confirm in wallet…" : "I understand — unlock stable LP"}
+                        {enableLp.isPending
+                          ? "Confirm in wallet…"
+                          : "I understand — unlock stable LP"}
                       </button>
                     ) : (
                       <>
@@ -1344,13 +1384,16 @@ function Dashboard() {
                       </span>
                     </div>
                     <p className="text-xs text-white/50 leading-relaxed">
-                      Provide liquidity to GMX's ETH/USD pool for a higher, variable yield. AXIS does
-                      it for you — no signing. Gas is on us; GMX's small network keeper fee comes from
-                      a little ETH in your wallet (excess refunded). It carries real market risk — the
-                      value moves with the pool — and funds are always returned to you.
+                      Provide liquidity to GMX's ETH/USD pool for a higher, variable yield. AXIS
+                      does it for you — no signing. Gas is on us; GMX's small network keeper fee
+                      comes from a little ETH in your wallet (excess refunded). It carries real
+                      market risk — the value moves with the pool — and funds are always returned to
+                      you.
                     </p>
                     <div className="mt-4 flex items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-widest text-white/40">USDC</span>
+                      <span className="text-[10px] uppercase tracking-widest text-white/40">
+                        USDC
+                      </span>
                       <input
                         type="number"
                         min={5}
@@ -1394,6 +1437,7 @@ function Dashboard() {
                 setChain={setChain}
                 count={filteredVaults.length}
                 label="vaults"
+                options={chainOptions}
               />
               <div className="border border-white/10">
                 {filteredVaults.map((v) => (
@@ -1478,6 +1522,7 @@ function Dashboard() {
                 setChain={setChain}
                 count={filteredOrders.length}
                 label="orders"
+                options={chainOptions}
               />
               <div className="border border-white/10">
                 {filteredOrders.map((o) => {
@@ -1576,30 +1621,38 @@ function FilterBar({
   setChain,
   count,
   label,
+  options = CHAINS,
 }: {
   chain: Chain | "All";
   setChain: (c: Chain | "All") => void;
   count: number;
   label: string;
+  options?: (Chain | "All")[];
 }) {
+  // With a single active chain the filter adds nothing — just show the count.
+  const showChains = options.length > 2;
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] sm:flex sm:flex-wrap items-center gap-2 sm:gap-3">
-      <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/50">
-        <Filter size={13} strokeWidth={1.75} /> Chain
-      </div>
-      <div className="flex gap-2 overflow-x-auto no-scrollbar min-w-0">
-        {CHAINS.map((c) => (
-          <button
-            key={c}
-            onClick={() => setChain(c)}
-            className={`shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-widest rounded-full border ${
-              chain === c ? "bg-white text-black border-white" : "border-white/20 text-white/70"
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
+      {showChains && (
+        <>
+          <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/50">
+            <Filter size={13} strokeWidth={1.75} /> Chain
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar min-w-0">
+            {options.map((c) => (
+              <button
+                key={c}
+                onClick={() => setChain(c)}
+                className={`shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-widest rounded-full border ${
+                  chain === c ? "bg-white text-black border-white" : "border-white/20 text-white/70"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <div className="col-span-2 sm:ml-auto text-[10px] uppercase tracking-widest text-white/40">
         {count} {label}
       </div>

@@ -43,6 +43,34 @@ const CHAIN_LABEL: Record<string, string> = {
   ethereum: "Ethereum",
 };
 
+const PROTOCOL_LABEL: Record<string, string> = {
+  aave: "Aave",
+  uniswap_v3: "Uniswap V3",
+  uniswap_lp: "Uniswap V3",
+  gmx_v2: "GMX",
+  gmx_glp: "GMX",
+  gmx_gm: "GMX",
+};
+
+// Human names for the raw agent tool ids so the log reads like plain English
+// instead of "get_portfolio_status".
+const TOOL_LABEL: Record<string, string> = {
+  get_portfolio_status: "Reviewed your portfolio",
+  generate_weekly_report: "Wrote your weekly note",
+  get_market_intelligence: "Checked the market",
+  rebalance_portfolio: "Rebalanced your positions",
+};
+
+function prettyProtocol(protocol: string): string {
+  const key = protocol.toLowerCase();
+  if (PROTOCOL_LABEL[key]) return PROTOCOL_LABEL[key];
+  return protocol.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function titleCase(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -55,11 +83,11 @@ function relativeTime(iso: string): string {
 export function positionsToVaults(positions: AgentStatus["positions"]): VaultRow[] {
   return positions.map((p, i) => ({
     id: `pos-${i}`,
-    name: `${p.protocol.toUpperCase()} ${p.asset}`,
+    name: `${prettyProtocol(p.protocol)} · ${p.asset}`,
     chain: CHAIN_LABEL[p.chain.toLowerCase()] ?? p.chain,
     apy: p.estimated_apy,
     allocated: p.amount_usdc,
-    protocol: p.protocol,
+    protocol: prettyProtocol(p.protocol),
     asset: p.asset,
   }));
 }
@@ -72,23 +100,29 @@ export function actionsToAgentFeed(actions: ActionEntry[]): AgentFeedItem[] {
     let message = a.message ?? "";
     if (!message) {
       if (tool === "execute_allocation") {
-        message = `Allocated $${input.amount_usdc} to ${input.protocol} (${input.asset})`;
+        const amt = Number(input.amount_usdc ?? 0);
+        message = `Put $${amt.toLocaleString()} into ${prettyProtocol(String(input.protocol ?? ""))} · ${input.asset}`;
       } else if (tool === "get_market_intelligence") {
-        message = `Market check: ${String(input.query ?? "").slice(0, 80)}`;
+        const q = String(input.query ?? "").trim();
+        message = q ? `Checked the market — ${q.slice(0, 80)}` : "Checked the market";
       } else {
-        message = `${tool.replace(/_/g, " ")}`;
+        message = TOOL_LABEL[tool] ?? titleCase(tool.replace(/_/g, " "));
       }
     }
+    // Only trades touch a specific chain — don't tag reviews/reports with one.
+    const rawChain = result.chain;
+    const chain =
+      typeof rawChain === "string" ? (CHAIN_LABEL[rawChain.toLowerCase()] ?? rawChain) : undefined;
     return {
       id: `action-${i}`,
       time: relativeTime(a.timestamp),
       kind: tool.includes("execute")
-        ? "rebalance"
+        ? "Trade"
         : tool.includes("intelligence")
-          ? "signal"
-          : "report",
+          ? "Signal"
+          : "Report",
       message,
-      chain: CHAIN_LABEL[String(result.chain ?? "arbitrum").toLowerCase()],
+      chain,
       amount:
         typeof result.estimated_daily_yield_usdc === "number"
           ? result.estimated_daily_yield_usdc * 7
@@ -107,7 +141,7 @@ export function actionsToOrders(actions: ActionEntry[]): OrderItem[] {
       return {
         id: `order-${i}`,
         chain: CHAIN_LABEL[String(result.chain ?? "arbitrum").toLowerCase()] ?? "Arbitrum",
-        action: `${input.action} ${input.asset} → ${input.protocol}`,
+        action: `${titleCase(String(input.action ?? "Supply"))} ${input.asset} → ${prettyProtocol(String(input.protocol ?? ""))}`,
         status: success ? "Filled" : "Failed",
         amount: Number(input.amount_usdc ?? 0),
         ts: Math.floor((Date.now() - new Date(a.timestamp).getTime()) / 60_000),

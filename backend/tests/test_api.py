@@ -76,11 +76,14 @@ async def test_deploy_prepare_returns_transactions(client, monkeypatch):
     async def mock_apys():
         return {"USDC": 4.2, "USDT": 4.0}
 
-    def mock_funding(owner, budget):
-        return budget
+    # The deploy flow now reads idle USDC straight from chain and caps it at the
+    # budget room, so stub the on-chain balance read instead of the old
+    # require_usdc_funding helper (removed in the gasless/session refactor).
+    def mock_balance(owner, asset):
+        return 500.0
 
     monkeypatch.setattr("routes.agent._live_aave_apys", mock_apys)
-    monkeypatch.setattr("routes.agent.require_usdc_funding", mock_funding)
+    monkeypatch.setattr("routes.agent.get_token_balance_usdc", mock_balance)
 
     await client.post(
         "/api/auth/register",
