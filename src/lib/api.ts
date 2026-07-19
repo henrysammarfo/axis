@@ -129,6 +129,9 @@ export type RoutePreviewResponse = {
   balances: WalletBalances;
   gmx_fundable: boolean;
   gmx_fee_eth: number;
+  budget_usdc: number;
+  deployed_usdc: number;
+  budget_room_usdc: number;
 };
 
 export type RouteApplyGroup = {

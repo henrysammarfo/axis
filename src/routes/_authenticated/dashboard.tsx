@@ -969,6 +969,14 @@ function Dashboard() {
                     </p>
                   )}
 
+                  {route.data.budget_usdc > 0 && (
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-white/40">
+                      Budget · ${route.data.deployed_usdc.toFixed(2)} used of $
+                      {route.data.budget_usdc.toFixed(2)} · ${route.data.budget_room_usdc.toFixed(2)}{" "}
+                      left to invest
+                    </p>
+                  )}
+
                   {route.data.projected && (
                     <p className="mt-3 text-[10px] uppercase tracking-widest text-white/40">
                       Projection · add USDC to your wallet to route it live (idle: $

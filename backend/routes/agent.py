@@ -255,6 +255,28 @@ def _gmx_fundability(eth_balance: float) -> tuple[bool, float]:
     return (eth_balance + 1e-9 >= fee_eth, fee_eth)
 
 
+async def _budget_room(tracker: "PortfolioTracker", user: Any, idle: float) -> tuple[float, float, float]:
+    """One consistent "how much AXIS can use" number across every deploy path.
+
+    The saved budget is the single cap. Positions already open count against it,
+    so the amount AXIS may still put to work now is:
+        room = min(idle_usdc, max(0, budget - already_deployed))
+    If no budget is set (shouldn't happen post-onboarding) we fall back to idle.
+    Returns (deployed_usdc, budget_usdc, room_usdc).
+    """
+    deployed = 0.0
+    try:
+        positions = await tracker.get_positions(user.id) if user else []
+        deployed = sum(float(p.get("amount_usdc", 0) or 0) for p in positions)
+    except Exception:
+        deployed = 0.0
+    budget = float(user.budget_usdc or 0.0) if user else 0.0
+    if budget <= 0:
+        return round(deployed, 2), 0.0, round(max(0.0, idle), 2)
+    room = min(idle, max(0.0, budget - deployed))
+    return round(deployed, 2), round(budget, 2), round(max(0.0, room), 2)
+
+
 def _validate_enums(risk_level: str, goal: str) -> tuple[str, str]:
     try:
         risk = parse_risk_level(risk_level)
@@ -308,17 +330,21 @@ async def preview_route(
     except Exception:
         idle = 0.0
 
-    saved_budget = float(user.budget_usdc or 0.0)
+    deployed, saved_budget, room = await _budget_room(tracker, user, idle)
+    remaining = max(0.0, saved_budget - deployed) if saved_budget > 0 else 0.0
     if request_body.budget_usdc and request_body.budget_usdc > 0:
+        # What-if amount, still bounded by the remaining budget cap.
         amount = float(request_body.budget_usdc)
+        if saved_budget > 0:
+            amount = min(amount, remaining)
         projected = amount > idle + 0.01
-    elif idle >= MIN_BUDGET_USDC:
-        amount = idle
+    elif room >= MIN_BUDGET_USDC:
+        amount = room
         projected = False
     else:
-        # Not enough idle to route yet — project against the saved budget so the
-        # user can still see the plan before funding.
-        amount = max(saved_budget, MIN_BUDGET_USDC)
+        # Not enough deployable room yet (low idle, or already at the budget cap)
+        # — project against the remaining budget so the plan shape still shows.
+        amount = max(remaining if remaining > 0 else saved_budget, MIN_BUDGET_USDC)
         projected = True
 
     market_risk_ok = risk == RiskLevel.AGGRESSIVE and bool(user.market_risk_consent)
@@ -344,6 +370,9 @@ async def preview_route(
         "balances": balances,
         "gmx_fundable": gmx_fundable,
         "gmx_fee_eth": gmx_fee_eth,
+        "budget_usdc": round(saved_budget, 2),
+        "deployed_usdc": round(deployed, 2),
+        "budget_room_usdc": round(room, 2),
     }
 
 
@@ -390,7 +419,18 @@ async def prepare_route_apply(
     except Exception:
         idle = 0.0
 
-    if idle < MIN_BUDGET_USDC:
+    # Route only within the budget room (budget − already deployed), so the
+    # one-tap apply respects the same cap as Begin / LP / GMX.
+    deployed, budget, room = await _budget_room(tracker, user, idle)
+    if room < MIN_BUDGET_USDC:
+        if idle >= MIN_BUDGET_USDC and budget > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"You've reached your ${budget:.0f} budget. Raise it on the "
+                    f"dashboard to put more to work."
+                ),
+            )
         raise HTTPException(
             status_code=400,
             detail=(
@@ -423,7 +463,7 @@ async def prepare_route_apply(
     plan = await route_best_yield(
         risk_level=risk,
         goal=goal,
-        budget_usdc=idle,
+        budget_usdc=room,
         market_risk_ok=market_risk_ok,
         exclude_venues=excluded,
     )
@@ -635,11 +675,21 @@ async def prepare_deploy(
     except Exception:
         idle = 0.0
 
-    # Deploy what the user actually funded, capped at their stated budget. The
-    # budget is a target/cap — not a hard gate — so funding $10 (or any amount
-    # from $10 up) just works. Mirrors the LP / GMX / best-route flows.
-    deploy_amount = round(min(idle, float(request_body.budget_usdc)), 2)
+    # Deploy what the user actually funded, capped at their budget room (budget
+    # minus what's already deployed). The budget is the one "how much AXIS can
+    # use" number — shared by the LP / GMX / best-route flows — so funding $10
+    # (or any amount from $10 up) just works and never exceeds the cap.
+    _deployed, budget, room = await _budget_room(tracker, user, idle)
+    deploy_amount = round(min(room, float(request_body.budget_usdc)), 2)
     if deploy_amount < MIN_BUDGET_USDC:
+        if room < MIN_BUDGET_USDC and idle >= MIN_BUDGET_USDC and budget > 0:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"You've reached your ${budget:.0f} budget. Raise it on the "
+                    f"dashboard to put more to work."
+                ),
+            )
         raise HTTPException(
             status_code=402,
             detail=(
@@ -1020,11 +1070,21 @@ async def prepare_lp(
         )
 
     idle = get_token_balance_usdc(request_body.ua_address, "USDC")
+    _deployed, budget, room = await _budget_room(tracker, user, float(idle or 0.0))
     suggested = recommend_lp_usdc(user.risk_level, user.goal or "grow", user.budget_usdc or 0.0)
     amount = request_body.usdc_amount if request_body.usdc_amount else suggested
-    amount = round(min(float(amount or 0.0), idle), 2)
+    # Cap at the budget room so LP shares the one "how much AXIS can use" number.
+    amount = round(min(float(amount or 0.0), room), 2)
 
     if amount < MIN_LP_USDC:
+        if room < MIN_LP_USDC and idle >= MIN_LP_USDC and budget > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"You've reached your ${budget:.0f} budget. Raise it on the "
+                    f"dashboard to add more to the stable LP."
+                ),
+            )
         raise HTTPException(
             status_code=400,
             detail=(
@@ -1246,11 +1306,21 @@ async def prepare_gmx_deposit(
     _require_gmx_eligible(user)
 
     idle = get_token_balance_usdc(request_body.ua_address, "USDC")
+    _deployed, budget, room = await _budget_room(tracker, user, float(idle or 0.0))
     suggested = recommend_gmx_usdc(user.risk_level, user.goal or "grow", user.budget_usdc or 0.0)
     amount = request_body.usdc_amount if request_body.usdc_amount else suggested
-    amount = round(min(float(amount or 0.0), idle), 2)
+    # Cap at the budget room so GMX shares the one "how much AXIS can use" number.
+    amount = round(min(float(amount or 0.0), room), 2)
 
     if amount < MIN_GMX_USDC:
+        if room < MIN_GMX_USDC and idle >= MIN_GMX_USDC and budget > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"You've reached your ${budget:.0f} budget. Raise it on the "
+                    f"dashboard to add more to GMX."
+                ),
+            )
         raise HTTPException(
             status_code=400,
             detail=(
