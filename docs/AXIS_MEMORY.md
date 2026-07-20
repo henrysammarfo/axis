@@ -7,6 +7,14 @@
 
 ---
 
+## Security note — key exposure (2026-07-20)
+
+- **GitHub / git history:** scanned — **no** full `sk-proj-…` OpenAI keys (or matching Venice/Magic/TinyFish/Alchemy/agent private keys) found in tracked commits. `backend/.env` is gitignored and was never committed.
+- **Local leak surface:** real secrets lived in gitignored `backend/.env` and were exposed in **chat / agent context**. Treat them as compromised.
+- **Action:** revoke OpenAI key; paste new AXIS OpenAI key into `backend/.env` + Vercel `axis-api` Production. Also rotate Venice, TinyFish, Magic secret, Particle server/client keys, Alchemy RPC key, ZeroDev API key, and `AGENT_WALLET_PRIVATE_KEY` when possible. Never paste live keys into chat or markdown.
+
+---
+
 ## Hackathon submission (2026-07-20)
 
 **Event:** UXmaxx / Particle Universal Accounts hackathon  
