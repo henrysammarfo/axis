@@ -22,11 +22,12 @@
 **Paste-ready pack (do not rebuild product — showcase these):**
 | Doc | Purpose |
 |-----|---------|
-| [`docs/SUBMISSION.md`](SUBMISSION.md) | Form fields + Checkpoint 3 write-up |
+| [`docs/HACKATHON_WIN_PACK.md`](HACKATHON_WIN_PACK.md) | **Win narrative** — README convert + project description + form fields |
+| [`docs/SUBMISSION.md`](SUBMISSION.md) | Encode form paste blocks + Checkpoint 3 |
 | [`docs/PITCH_DECK.md`](PITCH_DECK.md) | 12 slides → Canva / Google Slides |
 | [`docs/DEMO_SCRIPT.md`](DEMO_SCRIPT.md) | 2:00 + 90s Arbitrum cut |
 | [`docs/STARTUP_STRATEGY.md`](STARTUP_STRATEGY.md) | PMF · GTM · roadmap (win or not) |
-| [`docs/RECORD_AND_SUBMIT.md`](RECORD_AND_SUBMIT.md) | Final checklist before 11:59 |
+| [`docs/RECORD_AND_SUBMIT.md`](RECORD_AND_SUBMIT.md) | Final checklist before deadline |
 
 **Live URLs (production — ignore stale HANDOFF teamtitanlink URLs):**
 - Frontend: **https://axis-mainnet.vercel.app**

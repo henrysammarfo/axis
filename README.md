@@ -1,16 +1,19 @@
 # AXIS — AI DeFi Portfolio Agent
 
-> **Set. Forget. Earn.** Sign in with Google, deposit USDC, tap once — AXIS invests and rebalances on **Arbitrum One** for you, hands-free, with no seed phrase, no gas, and **no wallet pop-ups after Google login**.
+> **Set. Forget. Earn.** Google login → deposit USDC → one tap → AXIS invests on **Arbitrum One**. No MetaMask. No gas UI. **Zero transaction signing after login.**
 
-AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial position. The user never sees a private key, never signs a transaction after Google login, and never gives AXIS the ability to move funds anywhere except their own account.
+Most DeFi still forces wallet installs, bridges, and approve-every-trade. AXIS collapses that into a consumer flow: **Magic** embeds the wallet, **Particle Universal Accounts** upgrades the same EOA via **EIP-7702**, **ZeroDev SRA** takes cross-chain deposits, and a **CallPolicy-bounded session key** executes Aave / Uniswap LP / GMX gaslessly — funds can only settle back to the owner. Allocations are **deterministic**; AI only explains.
 
-- **Live app:** https://axis-mainnet.vercel.app
-- **Live API:** https://axis-api-beta.vercel.app (`/health`, `/config/status`)
-- **Chain:** Arbitrum One (`42161`)
-- **Architecture deep-dive + diagrams:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- **Production truth / audit checklist:** [`docs/PRODUCTION_AUDIT.md`](docs/PRODUCTION_AUDIT.md)
-- **Living project memory:** [`docs/AXIS_MEMORY.md`](docs/AXIS_MEMORY.md)
-- **Hackathon submission pack:** [`docs/SUBMISSION.md`](docs/SUBMISSION.md) · [`docs/PITCH_DECK.md`](docs/PITCH_DECK.md) · [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) · [`docs/STARTUP_STRATEGY.md`](docs/STARTUP_STRATEGY.md)
+| Verified | |
+|----------|--|
+| Live | https://axis-mainnet.vercel.app |
+| API | https://axis-api-beta.vercel.app |
+| Chain | Arbitrum One **42161** |
+| Min deploy | **$10** USDC |
+| Post-login signing (Begin/Apply) | **0** |
+| Judge proof | `/proof` — UA · Type-4 · SRA |
+| Gasless proof | [sponsored UserOp](https://arbiscan.io/tx/0x96c27132fd04085aaf0443521f105b921083fa8f1a35d06039cfe3ed86fcc3d4) |
+| Docs | [`ARCHITECTURE`](docs/ARCHITECTURE.md) · [`SUBMISSION`](docs/SUBMISSION.md) · [`HACKATHON_WIN_PACK`](docs/HACKATHON_WIN_PACK.md) · [`AXIS_MEMORY`](docs/AXIS_MEMORY.md) |
 
 ---
 
