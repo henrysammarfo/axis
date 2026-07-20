@@ -1,9 +1,46 @@
 # AXIS — Project Memory (Living Document)
 
-> **Last updated:** 2026-07-19  
+> **Last updated:** 2026-07-20  
 > **Production truth:** `docs/PRODUCTION_AUDIT.md`  
 > **Corrections to old guide:** `docs/AXIS_FACT_CHECK.md`  
 > **Do not** treat `AXIS_BUILD_GUIDE.md` as current.
+
+---
+
+## Hackathon submission (2026-07-20)
+
+**Event:** UXmaxx / Particle Universal Accounts hackathon  
+**Deadline:** Monday, July 20, 2026 — 11:59 AM Atlantic/Reykjavik  
+**Team:** Henry Sam Marfo (Leader)
+
+**Tracks entered:**
+- Universal Accounts Track (Particle EIP-7702) — primary
+- General Track → ZeroDev Subtrack 2
+- Arbitrum “Road to Open House London” Bounty
+- Magic Labs Bonus Challenge
+
+**Paste-ready pack (do not rebuild product — showcase these):**
+| Doc | Purpose |
+|-----|---------|
+| [`docs/SUBMISSION.md`](SUBMISSION.md) | Form fields + Checkpoint 3 write-up |
+| [`docs/PITCH_DECK.md`](PITCH_DECK.md) | 12 slides → Canva / Google Slides |
+| [`docs/DEMO_SCRIPT.md`](DEMO_SCRIPT.md) | 2:00 + 90s Arbitrum cut |
+| [`docs/STARTUP_STRATEGY.md`](STARTUP_STRATEGY.md) | PMF · GTM · roadmap (win or not) |
+| [`docs/RECORD_AND_SUBMIT.md`](RECORD_AND_SUBMIT.md) | Final checklist before 11:59 |
+
+**Live URLs (production — ignore stale HANDOFF teamtitanlink URLs):**
+- Frontend: **https://axis-mainnet.vercel.app**
+- API: **https://axis-api-beta.vercel.app**
+- Judge proof (after Google login): **https://axis-mainnet.vercel.app/proof**
+- Repo: **https://github.com/henrysammarfo/axis**
+
+**Pre-record smoke (agent-verified 2026-07-20):**
+- Frontend `/` and `/onboard` → HTTP 200
+- API `/health` → ok, `fully_configured: true`, `missing_keys: []`
+- `/config/status` → Magic, Particle, ZeroDev, Google OAuth, chain_id **42161**, dedicated Alchemy RPC, Venice + TinyFish + x402 green
+- Interactive path still needs you: Google login → `/proof` Type-4 + SRA → fund USDC → Begin/Apply → Arbiscan
+
+**After you upload video + deck:** paste YouTube unlisted + Slides/Canva URLs into `docs/SUBMISSION.md` and this section.
 
 ---
 
@@ -164,10 +201,10 @@ and reconcile the GM balance from chain.
 - Docs: KEYS_SETUP env examples point at Arbitrum One
 
 ### Still incomplete
-- End-to-end judge smoke on **funded** mainnet wallet (needs ~ETH gas + USDC for deposit/withdraw)
-- DeFi activate still requires client UA signature path for primary execution (not agent-wallet on mainnet)
-- Postgres durable production DB → not default on Vercel API
+- End-to-end judge smoke on **funded** mainnet wallet (needs USDC via SRA/direct; optional ETH for GMX) — run before demo video
 - Rotate secrets previously pasted in chat
+- ~~Postgres~~ — wired (Supabase); keep durable in prod
+- ~~Client UA signature for every invest~~ — superseded: silent session grant at Google login; Begin/Apply are signing-free
 
 ---
 
@@ -181,8 +218,8 @@ Wallet:    Magic Labs Google OAuth + @magic-ext/evm
 Accounts:  Particle Universal Accounts + EIP-7702 (Arbitrum One)
 Gas:       ZeroDev v3 bundler/paymaster (42161)
 Deposits:  ZeroDev Smart Routing Address → Arbitrum One
-DB:        PostgreSQL (mandatory production)
-Hosting:   Vercel frontend + durable API host (App Service / GCP / equivalent)
+DB:        PostgreSQL (Supabase)
+Hosting:   Vercel axis-mainnet + axis-api
 ```
 
 ---
@@ -190,5 +227,5 @@ Hosting:   Vercel frontend + durable API host (App Service / GCP / equivalent)
 ## Next chat prompt
 
 ```
-Continue mainnet AXIS: update local .env to 42161 + Alchemy/ZeroDev mainnet RPCs; Google login → confirm /proof shows Type-4 hash + SRA; fund Magic wallet ~$20 ETH/USDC for smoke deposit+withdraw. Do not hallucinate — follow docs/PRODUCTION_AUDIT.md.
+Submission day: follow docs/RECORD_AND_SUBMIT.md — record demo (docs/DEMO_SCRIPT.md), export deck (docs/PITCH_DECK.md), paste links into Encode form from docs/SUBMISSION.md. Live = axis-mainnet.vercel.app. Do not hallucinate — follow docs/AXIS_MEMORY.md.
 ```

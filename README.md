@@ -1,8 +1,8 @@
 # AXIS — AI DeFi Portfolio Agent
 
-> **Set. Forget. Earn.** Sign in with Google, deposit USDC, tap once — AXIS invests and rebalances on **Arbitrum One** for you, hands-free, with no seed phrase, no gas, and no wallet pop-ups after the first approval.
+> **Set. Forget. Earn.** Sign in with Google, deposit USDC, tap once — AXIS invests and rebalances on **Arbitrum One** for you, hands-free, with no seed phrase, no gas, and **no wallet pop-ups after Google login**.
 
-AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial position. The user never sees a private key, never signs a raw transaction after setup, and never gives AXIS the ability to move funds anywhere except their own account.
+AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial position. The user never sees a private key, never signs a transaction after Google login, and never gives AXIS the ability to move funds anywhere except their own account.
 
 - **Live app:** https://axis-mainnet.vercel.app
 - **Live API:** https://axis-api-beta.vercel.app (`/health`, `/config/status`)
@@ -10,6 +10,7 @@ AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial
 - **Architecture deep-dive + diagrams:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - **Production truth / audit checklist:** [`docs/PRODUCTION_AUDIT.md`](docs/PRODUCTION_AUDIT.md)
 - **Living project memory:** [`docs/AXIS_MEMORY.md`](docs/AXIS_MEMORY.md)
+- **Hackathon submission pack:** [`docs/SUBMISSION.md`](docs/SUBMISSION.md) · [`docs/PITCH_DECK.md`](docs/PITCH_DECK.md) · [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) · [`docs/STARTUP_STRATEGY.md`](docs/STARTUP_STRATEGY.md)
 
 ---
 
@@ -38,7 +39,7 @@ AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial
 - **Deposit USDC, tap "Begin".** AXIS supplies to Aave on Arbitrum. Every action is a real, verifiable Arbiscan transaction.
 - **Best-yield router + one-tap apply.** AXIS scans live APYs across every venue (Aave USDC/USDT, the Uniswap V3 USDC/USDT stable LP, and the GMX V2 GM pool) and builds **one** risk-adjusted allocation. **"Apply best route"** executes the whole plan in a single tap — each venue as its own gasless UserOp, **no signing** — and skips any leg it can't fund, then shows a "what AXIS did" summary.
 - **Balance-aware.** The router reads what the account actually holds (USDC / USDT / ETH). GMX needs a little of the user's own ETH for its keeper fee, so if that's missing AXIS pre-skips GMX and folds the money into the stable core instead of failing.
-- **Hands-off from then on.** With one owner signature, the user grants AXIS a **policy-bounded session key**. Every venue action (Aave supply/withdraw, LP open/close, GMX add/close) runs gaslessly with zero further prompts, and funds can only ever move to the user's own account.
+- **Hands-off from login.** At Google sign-in, AXIS silently grants a **policy-bounded session key** (Magic headless approval — no “okay in wallet” step in the product UX). Every venue action (Aave supply/withdraw, LP open/close, GMX add/close) runs gaslessly with zero further prompts, and funds can only ever move to the user's own account.
 - **Power users** can define a custom USDC/USDT split *and* toggle individual market venues (e.g. turn GMX off) for the auto-route — always inside the same safety envelope.
 - **Plain-English reporting.** An AI layer (Venice primary, OpenAI fallback) *explains* what the deterministic engine did — it never decides allocations.
 
@@ -46,7 +47,7 @@ AXIS turns "I want my money to earn safely" into a real, on-chain, non-custodial
 
 The core guarantee: **even if AXIS's agent key is fully compromised, no attacker can steal user funds.**
 
-This is enforced **on-chain**, not by trust. When a user turns on hands-off mode, they sign a ZeroDev [Kernel v3.3](https://docs.zerodev.app) **session key** bounded by a `CallPolicy` (`src/lib/kernel-session.ts`). The **base policy** (always on) permits only:
+This is enforced **on-chain**, not by trust. At login, AXIS enables a ZeroDev [Kernel v3.3](https://docs.zerodev.app) **session key** bounded by a `CallPolicy` (`src/lib/kernel-session.ts`) — silently as part of account setup. The **base policy** (always on) permits only:
 
 | Allowed call | Hard constraints baked into the signed policy |
 |---|---|
@@ -83,7 +84,7 @@ flowchart LR
   FE -->|/agent/route/preview| API[FastAPI backend]
   API -->|live APYs + balances| RT[Best-yield router · risk-adjusted plan]
   U -->|Deposit USDC + Apply best route| SK[Policy-bounded session key]
-  U -->|one signature| SK
+  U -->|Google login · silent grant| SK
   SK -.gasless UserOps.-> PM[ZeroDev paymaster/bundler]
   PM --> AAVE[(Aave v3 · USDC)]
   PM --> LP[(Uniswap V3 · USDC/USDT LP)]
@@ -114,7 +115,7 @@ axis/
 ├── src/                        # TanStack Start frontend
 │   ├── lib/
 │   │   ├── wallet.ts           # Magic + EIP-7702 Kernel delegation, deploy/rebalance
-│   │   ├── kernel-session.ts   # Builds the policy-bounded session approval (owner signs once)
+│   │   ├── kernel-session.ts   # Builds the policy-bounded session approval (granted at login)
 │   │   ├── agent-executor.ts   # Server fn: gasless UserOp executor (holds agent key)
 │   │   ├── strategy.ts         # Custom-strategy types
 │   │   ├── api.ts              # Typed backend client
@@ -169,8 +170,8 @@ On top of the matrix, AXIS runs a **deterministic best-yield router**. It fetche
 
 ## Hands-off mode (gasless session keys)
 
-1. Frontend fetches the agent's session-signer address (`getSessionSignerAddress` server fn).
-2. `buildSessionApproval` builds a `CallPolicy`-bounded Kernel account and asks the owner for **one** Magic signature. Aggressive users can include the market-risk venues (LP + GMX) in the same approval.
+1. At Google login (and silently again from the dashboard if needed), the frontend fetches the agent's session-signer address (`getSessionSignerAddress` server fn).
+2. `buildSessionApproval` builds a `CallPolicy`-bounded Kernel account and completes Magic's headless session grant — **no user-facing wallet popup** in the product UX. Aggressive users can include market-risk venues (LP + GMX) in the same approval when they consent.
 3. The serialized approval is stored server-side via `POST /api/agent/session/enable`.
 4. To act, the backend builds **policy-safe, owner-pinned** calls (`build_rebalance_calls`, `build_supply_calls`, `build_lp_enter_calls`/`exit`, `build_gm_deposit_calls`/`withdraw`); the Node executor loads the owner's approval (after re-verifying their token) and submits **gasless** UserOps through the ZeroDev paymaster. GMX's native ETH keeper fee is the one cost drawn from the user's own ETH (never sponsored).
 5. Result is verified on-chain and logged.
@@ -188,7 +189,7 @@ Base URL: `https://axis-api-beta.vercel.app`. Mutating routes require `Authoriza
 | `POST` | `/api/auth/sponsor-eip7702` | token | Sponsor the Type-4 delegation tx |
 | `POST` | `/api/agent/strategy/preview` | – | Preview matrix plan + live APYs |
 | `POST` | `/api/agent/activate` | ✅ | Save risk/goal/budget (config only) |
-| `POST` | `/api/agent/deploy/prepare` | ✅ | Check funding + build Aave txs to sign |
+| `POST` | `/api/agent/deploy/prepare` | ✅ | Check funding + build Aave session calls |
 | `POST` | `/api/agent/activate/confirm` | ✅ | Verify on-chain txs + persist positions |
 | `POST` | `/api/agent/session/enable` | ✅ | Store policy-bounded session approval |
 | `GET` | `/api/agent/session/approval/{user_id}` | ✅ (self) | Server executor loads own approval |

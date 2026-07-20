@@ -194,6 +194,23 @@ function SettingsPage() {
           </div>
         </section>
 
+        {/* Judge proof — easy to find for hackathon / demos */}
+        <section className="space-y-3">
+          <h2 className="text-lg tracking-[-0.02em]">Judge proof</h2>
+          <Link
+            to="/proof"
+            className="card-calm p-5 flex items-center justify-between gap-4 hover:border-white/20 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className="text-[15px] text-white">UA · EIP-7702 · SRA evidence</p>
+              <p className="text-sm text-white/45">
+                Live mainnet checklist for Particle, ZeroDev, Magic, and Arbitrum.
+              </p>
+            </div>
+            <span className="text-sm text-[color:var(--color-lime)] shrink-0">Open →</span>
+          </Link>
+        </section>
+
         {/* About */}
         <section className="space-y-3">
           <h2 className="text-lg tracking-[-0.02em]">About</h2>
@@ -204,7 +221,7 @@ function SettingsPage() {
                 Manifesto
               </Link>
               <Link to="/proof" className="text-white/50 hover:text-white transition-colors">
-                Proof
+                Judge proof
               </Link>
               <Link to="/vault" className="text-white/50 hover:text-white transition-colors">
                 Vault
