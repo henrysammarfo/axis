@@ -14,6 +14,7 @@ from routes.agent import router as agent_router
 from routes.auth import router as auth_router
 from routes.health import router as health_router
 from routes.portfolio import router as portfolio_router
+from vercel_path import unwrap_vercel_path
 
 settings = get_settings()
 limiter.default_limits = [f"{settings.rate_limit_per_minute}/minute"]
@@ -48,11 +49,32 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(portfolio_router, prefix="/api")
 
 
 @app.get("/")
+@app.get("/api")
 async def root():
     return {"service": "AXIS API", "docs": "/docs", "health": "/health"}
+
+
+class _VercelPathASGI:
+    """Vercel FastAPI entrypoint is `main:app` and now sees rewrite destinations."""
+
+    def __init__(self, inner):
+        self.app = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") in {"http", "websocket"}:
+            path = unwrap_vercel_path(scope.get("path") or "/")
+            scope = {**scope, "path": path, "raw_path": path.encode("utf-8")}
+        await self.app(scope, receive, send)
+
+    def __getattr__(self, name):
+        return getattr(self.app, name)
+
+
+app = _VercelPathASGI(app)
