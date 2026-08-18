@@ -148,14 +148,21 @@ export const executeSessionCalls = createServerFn({ method: "POST" })
       value: BigInt(c.value ?? "0"),
     }));
 
-    const userOpHash = await kernelClient.sendUserOperation({ calls });
-    const receipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
+    try {
+      const userOpHash = await kernelClient.sendUserOperation({ calls });
+      const receipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
 
-    return {
-      user_op_hash: userOpHash,
-      tx_hash: receipt.receipt.transactionHash,
-      success: Boolean(receipt.success),
-    };
+      return {
+        user_op_hash: userOpHash,
+        tx_hash: receipt.receipt.transactionHash,
+        success: Boolean(receipt.success),
+      };
+    } catch (error) {
+      const { userFacingError } = await import("./user-error");
+      throw new Error(
+        userFacingError(error, "AXIS couldn't complete that move. Try again in a moment."),
+      );
+    }
   });
 
 export const AGENT_EXECUTOR_CHAIN_ID = ARBITRUM_ONE_CHAIN_ID;

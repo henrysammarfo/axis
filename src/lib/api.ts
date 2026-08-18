@@ -2,6 +2,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 import { getStoredSession } from "./wallet";
 import type { ActionEntry } from "./portfolio";
+import { userFacingError } from "./user-error";
 
 export type AgentStatus = {
   active: boolean;
@@ -72,7 +73,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         : Array.isArray(detail)
           ? detail[0]?.msg
           : `API error ${res.status}`;
-    throw new Error(message);
+    throw new Error(userFacingError(message, `Couldn’t reach AXIS (${res.status}). Try again.`));
   }
   return res.json() as Promise<T>;
 }

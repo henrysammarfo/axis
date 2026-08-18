@@ -52,6 +52,7 @@ from services.yield_router import (
     VENUE_AAVE_USDC,
     VENUE_GMX_GM,
     VENUE_UNISWAP_LP,
+    fetch_venue_quotes,
     route_best_yield,
 )
 
@@ -1502,24 +1503,33 @@ async def manual_rebalance(
 
     assert_wallet_belongs_to_user(user, request_body.ua_address, allow_first_bind=False)
 
-    # v1: rebalance does not invent new protocols — explain current matrix prefs only.
     apys = await _live_aave_apys()
-    plan = build_plan(user.risk_level, user.goal or "grow", user.budget_usdc or MIN_BUDGET_USDC, apys)
+    plan = build_plan(
+        user.risk_level, user.goal or "grow", user.budget_usdc or MIN_BUDGET_USDC, apys
+    )
+    quotes = await fetch_venue_quotes(market_risk_ok=True)
+    try:
+        idle = float(get_token_balance_usdc(request_body.ua_address, "USDC") or 0.0)
+    except Exception:
+        idle = 0.0
+    invested = float(sum(float(p.get("amount_usdc") or 0) for p in (await tracker.get_positions(request_body.user_id))))
     defi = DeFiExecutor(request_body.ua_address)
     x402 = X402Client(request_body.ua_address, db)
     agent = AxisAgent(defi, x402, tracker)
-    explained = await agent.explain_plan(plan)
+    answered = await agent.answer_user(
+        request_body.instruction,
+        plan=plan,
+        quotes=[q.to_dict() for q in quotes],
+        idle_usdc=idle,
+        invested_usdc=invested,
+    )
 
     return {
         "status": "rebalance_preview",
-        "explanation": (
-            f"Noted: {request_body.instruction.strip()[:200]}. "
-            f"{explained['explanation']} "
-            "To change risk or goal, run Activate again with a new selection."
-        ),
+        "explanation": answered["explanation"],
         "actions": [],
         "plan": plan.to_dict(),
-        "provider": explained["provider"],
+        "provider": answered["provider"],
     }
 
 

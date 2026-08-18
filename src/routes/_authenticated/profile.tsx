@@ -11,9 +11,9 @@ import {
   fileToAvatarDataUrl,
   getProfile,
   nameFromEmail,
-  resolveAvatarSrc,
   saveProfile,
 } from "../../lib/profile";
+import { AxisAvatar } from "../../components/brand/AxisAvatar";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () =>
@@ -120,8 +120,8 @@ function ProfilePage() {
 
         {/* Identity preview */}
         <section className="card-calm p-6 flex items-center gap-5">
-          <img
-            src={resolveAvatarSrc(avatar)}
+          <AxisAvatar
+            avatar={avatar}
             alt="Your avatar"
             className="h-20 w-20 rounded-full object-cover border border-white/10 bg-white/5 shrink-0"
           />
@@ -178,7 +178,11 @@ function ProfilePage() {
                       : "border-white/10 hover:border-white/30"
                   }`}
                 >
-                  <img src={a.src} alt={a.label} className="h-full w-full object-cover" />
+                  <AxisAvatar
+                    avatar={a.id}
+                    alt={a.label}
+                    className="h-full w-full object-cover"
+                  />
                   {selected && (
                     <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-[color:var(--color-lime)] text-black grid place-items-center">
                       <Check size={12} strokeWidth={3} />

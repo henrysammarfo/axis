@@ -89,6 +89,24 @@ def _parse_gmx_apy_payload(data: dict[str, Any], *, chain_name: str, source: str
         ),
         reverse=True,
     )
+    ETH_USD = "0x70d95587d40A2caf56bd97485aB3Eec10Bee6336"
+    markets_l = {str(k).lower(): v for k, v in markets.items()}
+    eth_usd = markets_l.get(ETH_USD.lower())
+    if isinstance(eth_usd, dict) and float(eth_usd.get("apy", 0) or 0) > 0:
+        representative = float(eth_usd.get("apy", 0)) * 100
+        top = float(eth_usd.get("apy", 0)) * 100
+        return {
+            "protocol": "gmx_gm",
+            "apy": round(representative, 2),
+            "top_market_apy": round(top, 2),
+            "markets_tracked": len(apys) if apys else 1,
+            "period": "30d",
+            "chain": chain_name,
+            "risk": "medium",
+            "source": source,
+            "note": "GMX v2 ETH/USD GM pool (30d APY)",
+        }
+
     if not apys:
         return None
 
@@ -270,6 +288,8 @@ class YieldFetcher:
     async def get_uniswap_apy(self, token0: str, token1: str, fee_tier: int = 3000) -> dict[str, Any]:
         if self.chain_id == ARBITRUM_ONE_CHAIN_ID:
             pool = await self._fetch_uniswap_defillama(token0, token1, fee_tier)
+            if not pool and fee_tier == 100:
+                pool = await self._fetch_uniswap_defillama(token0, token1, 500)
             if pool:
                 return {
                     "token0": token0.upper(),

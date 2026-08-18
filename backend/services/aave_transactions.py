@@ -9,6 +9,7 @@ from eth_utils import function_signature_to_4byte_selector, to_checksum_address
 from web3 import Web3
 
 from chain_config import (
+    AAVE_DATA_PROVIDER_BY_CHAIN,
     AAVE_POOL_BY_CHAIN,
     AAVE_UNDERLYING_BY_CHAIN,
     ARBITRUM_ONE_CHAIN_ID,
@@ -40,6 +41,29 @@ ERC20_ABI = [
         "stateMutability": "view",
         "type": "function",
     },
+]
+
+AAVE_USER_RESERVE_ABI = [
+    {
+        "inputs": [
+            {"name": "asset", "type": "address"},
+            {"name": "user", "type": "address"},
+        ],
+        "name": "getUserReserveData",
+        "outputs": [
+            {"name": "currentATokenBalance", "type": "uint256"},
+            {"name": "currentStableDebt", "type": "uint256"},
+            {"name": "currentVariableDebt", "type": "uint256"},
+            {"name": "principalStableDebt", "type": "uint256"},
+            {"name": "scaledVariableDebt", "type": "uint256"},
+            {"name": "stableBorrowRate", "type": "uint256"},
+            {"name": "liquidityRate", "type": "uint256"},
+            {"name": "stableRateLastUpdated", "type": "uint40"},
+            {"name": "usageAsCollateralEnabled", "type": "bool"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    }
 ]
 
 
@@ -87,6 +111,27 @@ def get_token_balance_usdc(owner: str, asset: str = "USDC") -> float:
     raw = int(token.functions.balanceOf(to_checksum_address(owner)).call())
     decimals = int(token.functions.decimals().call())
     return raw / (10**decimals)
+
+
+def get_aave_supplied_usdc(owner: str) -> float | None:
+    """aUSDC currently supplied on Aave. None if the read fails."""
+    try:
+        cid = _chain_id()
+        provider_addr = AAVE_DATA_PROVIDER_BY_CHAIN.get(cid)
+        if not provider_addr:
+            return None
+        w3 = _w3()
+        provider = w3.eth.contract(
+            address=to_checksum_address(provider_addr),
+            abi=AAVE_USER_RESERVE_ABI,
+        )
+        data = provider.functions.getUserReserveData(
+            underlying_token("USDC", cid),
+            to_checksum_address(owner),
+        ).call()
+        return int(data[0]) / (10**USDC_DECIMALS)
+    except Exception:
+        return None
 
 
 def get_native_balance_wei(owner: str) -> int:
@@ -336,6 +381,13 @@ def build_rebalance_calls(
     wants_invest = any(w in text for w in _INVEST_WORDS)
 
     if wants_safety and not wants_invest:
+        supplied = get_aave_supplied_usdc(owner_cs)
+        if supplied is not None and supplied < 0.01:
+            return (
+                [],
+                [],
+                "Nothing in Aave to pull out. Add USDC first, then tap Begin.",
+            )
         call = _usdc_withdraw_all_call(owner_cs, cid)
         return (
             [call],

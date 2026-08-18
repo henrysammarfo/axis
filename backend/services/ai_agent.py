@@ -13,7 +13,7 @@ from config import get_settings
 from services.defi_executor import DeFiExecutor
 from services.portfolio_tracker import PortfolioTracker
 from services.strategy_engine import AllocationPlan, goal_label
-from services.tools import AXIS_EXPLAIN_SYSTEM, AXIS_SYSTEM, AXIS_TOOLS
+from services.tools import AXIS_ASK_SYSTEM, AXIS_EXPLAIN_SYSTEM, AXIS_SYSTEM, AXIS_TOOLS
 from services.x402_client import IntelligenceUnavailable, X402Client
 from services.yield_fetcher import YieldDataUnavailable
 
@@ -78,6 +78,70 @@ class AxisAgent:
                 "provider": "template",
                 "actions": [],
             }
+
+    async def answer_user(
+        self,
+        instruction: str,
+        *,
+        plan: AllocationPlan,
+        quotes: list[dict[str, Any]],
+        idle_usdc: float,
+        invested_usdc: float,
+    ) -> dict[str, Any]:
+        """Plain-English reply to Ask AXIS — uses live yields. Does not move money."""
+        provider = self.settings.ai_provider
+        briefing = {
+            "user_said": instruction.strip()[:400],
+            "idle_usdc": round(idle_usdc, 2),
+            "invested_usdc": round(invested_usdc, 2),
+            "plan": plan.to_dict(),
+            "live_yields": quotes,
+        }
+        if provider not in ("venice", "openai"):
+            return {
+                "explanation": self._fallback_ask(instruction, plan, quotes, idle_usdc),
+                "provider": "template",
+            }
+        try:
+            text = await self._chat_completion(
+                json.dumps(briefing, indent=2),
+                provider,
+                max_tokens=220,
+                system=AXIS_ASK_SYSTEM,
+            )
+            return {
+                "explanation": text or self._fallback_ask(instruction, plan, quotes, idle_usdc),
+                "provider": provider,
+            }
+        except Exception as exc:
+            logger.warning("Ask AXIS LLM failed: %s", exc)
+            return {
+                "explanation": self._fallback_ask(instruction, plan, quotes, idle_usdc),
+                "provider": "template",
+            }
+
+    @staticmethod
+    def _fallback_ask(
+        instruction: str,
+        plan: AllocationPlan,
+        quotes: list[dict[str, Any]],
+        idle_usdc: float,
+    ) -> str:
+        bits = [
+            f"{q.get('asset') or q.get('venue')}: {float(q.get('apy') or 0):.2f}%"
+            for q in quotes
+            if float(q.get("apy") or 0) > 0
+        ]
+        yields = ", ".join(bits[:4]) or "yields are refreshing"
+        if idle_usdc < 10:
+            return (
+                f"Nothing is deployed yet — you have ${idle_usdc:.2f} idle. "
+                f"Live now: {yields}. Send at least $10 native USDC on Arbitrum, then tap Begin."
+            )
+        return (
+            f"Heard “{instruction.strip()[:80]}”. "
+            f"{AxisAgent._fallback_explanation(plan)} Live: {yields}."
+        )
 
     async def run(
         self,

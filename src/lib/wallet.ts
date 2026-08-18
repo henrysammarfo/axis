@@ -27,8 +27,9 @@ import {
   isArbitrumOne,
 } from "./chain";
 import { isFrontendFullyConfigured, missingFrontendEnv } from "./env";
-import { buildSessionApproval } from "./kernel-session";
+import { buildSessionApproval, USDC_ARBITRUM } from "./kernel-session";
 import { getSessionSignerAddress, executeSessionCalls } from "./agent-executor";
+import { userFacingError } from "./user-error";
 
 export type WalletSession = {
   userId: string;
@@ -101,7 +102,7 @@ function formatWalletError(error: unknown, fallback: string, _fundAddress?: stri
       "Account upgrade is gasless — AXIS pays. If this persists, the sponsor wallet needs a refill of ETH on Arbitrum One.",
     );
   }
-  return error instanceof Error ? error : new Error(message || fallback);
+  return new Error(userFacingError(error, fallback));
 }
 
 function normalize7702Authorization(
@@ -1206,6 +1207,209 @@ export async function withdrawGmxViaSession(body: {
     tx_hash: result.tx_hash,
   });
   return { ...confirmed, tx_hash: result.tx_hash };
+}
+
+const USDC_DECIMALS = 6;
+const DUST_USDC = 0.01;
+
+async function readUsdcRaw(owner: string): Promise<bigint> {
+  const { createPublicClient, http, getAddress } = await import("viem");
+  const { arbitrum } = await import("viem/chains");
+  const { erc20Abi } = await import("viem");
+  const rpcUrl = requireEnv("VITE_ARBITRUM_RPC_URL");
+  const client = createPublicClient({ chain: arbitrum, transport: http(rpcUrl) });
+  return client.readContract({
+    address: USDC_ARBITRUM,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [getAddress(owner)],
+  });
+}
+
+function rawToUsdc(raw: bigint): number {
+  return Number(raw) / 10 ** USDC_DECIMALS;
+}
+
+function usdcToRaw(amount: number): bigint {
+  return BigInt(Math.round(amount * 10 ** USDC_DECIMALS));
+}
+
+/** Idle native USDC on the Magic EOA (not Aave). */
+export async function getIdleUsdcBalance(owner: string): Promise<number> {
+  return rawToUsdc(await readUsdcRaw(owner));
+}
+
+/**
+ * Send idle USDC from the Magic EOA to an external Arbitrum address.
+ * If USDC is still in Aave, pulls it back first (gasless). The send itself is
+ * owner-signed via Kernel + paymaster so the user does not need ETH.
+ */
+export async function sendUsdcToAddress(params: {
+  to: string;
+  amountUsdc?: number;
+}): Promise<{ tx_hash: string; amount_usdc: number }> {
+  const session = getStoredSession();
+  if (!session?.uaAddress) {
+    throw new Error("Sign in again, then withdraw.");
+  }
+  if (!isArbitrumOne()) {
+    throw new Error("Withdraw is on Arbitrum One only.");
+  }
+
+  const { createPublicClient, http, getAddress, isAddress, encodeFunctionData } = await import("viem");
+  const { arbitrum } = await import("viem/chains");
+  const { erc20Abi } = await import("viem");
+
+  const trimmed = params.to.trim();
+  if (!isAddress(trimmed)) {
+    throw new Error("That doesn’t look like an Arbitrum address.");
+  }
+  const dest = getAddress(trimmed);
+  if (dest === getAddress(session.uaAddress)) {
+    throw new Error(
+      "That’s your AXIS address. Paste MetaMask or an exchange Arbitrum deposit address.",
+    );
+  }
+  if (session.sraAddress && dest === getAddress(session.sraAddress)) {
+    throw new Error("That’s the AXIS deposit address. Paste the wallet you want the USDC in.");
+  }
+  if (dest === getAddress(USDC_ARBITRUM)) {
+    throw new Error("That’s the USDC contract, not a wallet.");
+  }
+
+  const status = await axisApi.status(session.userId).catch(() => null);
+  const invested = (status?.positions ?? []).some(
+    (p) =>
+      p.status !== "closed" &&
+      Number(p.amount_usdc) > DUST_USDC &&
+      String(p.protocol || "").toLowerCase().includes("aave"),
+  );
+  if (invested) {
+    await rebalanceViaSession({
+      user_id: session.userId,
+      ua_address: session.uaAddress,
+      instruction: "withdraw",
+    });
+  }
+
+  let raw = 0n;
+  for (let i = 0; i < 12; i++) {
+    raw = await readUsdcRaw(session.uaAddress);
+    if (raw > 0n) break;
+    if (!invested) break;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+
+  const idle = rawToUsdc(raw);
+  if (idle < DUST_USDC) {
+    throw new Error(
+      "No USDC in the wallet to send. If you used Bold / GMX / LP, close those on the dashboard first, then ask AXIS “withdraw”.",
+    );
+  }
+
+  const amount =
+    params.amountUsdc == null || Number.isNaN(params.amountUsdc) ? idle : params.amountUsdc;
+  if (!(amount >= DUST_USDC)) {
+    throw new Error("Minimum send is $0.01 USDC.");
+  }
+  if (amount > idle + 0.000001) {
+    throw new Error(`You only have $${idle.toFixed(2)} USDC idle to send.`);
+  }
+
+  const amountRaw = usdcToRaw(Math.min(amount, idle));
+  const data = encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "transfer",
+    args: [dest, amountRaw],
+  });
+
+  const magic = getMagic();
+  await magic.evm.switchChain(ARBITRUM_ONE_CHAIN_ID);
+  const provider = magic.rpcProvider as {
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+
+  const zerodevRpc = import.meta.env.VITE_ZERODEV_RPC_URL?.toString().trim();
+  if (zerodevRpc) {
+    let submitted = false;
+    try {
+      const {
+        constants,
+        createKernelAccount,
+        createKernelAccountClient,
+        createZeroDevPaymasterClient,
+        getUserOperationGasPrice,
+      } = await import("@zerodev/sdk");
+      const publicClient = createPublicClient({
+        chain: arbitrum,
+        transport: http(requireEnv("VITE_ARBITRUM_RPC_URL")),
+      });
+      const entryPoint = constants.getEntryPoint("0.7");
+      const account = await createKernelAccount(publicClient, {
+        entryPoint,
+        kernelVersion: constants.KERNEL_V3_3,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        eip7702Account: provider as any,
+        address: getAddress(session.uaAddress),
+      });
+      const paymasterClient = createZeroDevPaymasterClient({
+        chain: arbitrum,
+        transport: http(zerodevRpc),
+      });
+      const kernelClient = createKernelAccountClient({
+        account,
+        chain: arbitrum,
+        bundlerTransport: http(zerodevRpc),
+        client: publicClient,
+        paymaster: paymasterClient,
+        userOperation: {
+          estimateFeesPerGas: async ({ bundlerClient }) => getUserOperationGasPrice(bundlerClient),
+        },
+      });
+      submitted = true;
+      const userOpHash = await kernelClient.sendUserOperation({
+        calls: [{ to: USDC_ARBITRUM, data, value: 0n }],
+      });
+      const receipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
+      const txHash = receipt.receipt.transactionHash;
+      if (!receipt.success || !txHash) {
+        throw new Error("Send did not confirm on-chain.");
+      }
+      return { tx_hash: txHash, amount_usdc: rawToUsdc(amountRaw) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (submitted) {
+        throw error instanceof Error ? error : new Error(message);
+      }
+      // Kernel client did not start — try a direct Magic transfer (needs a little ETH).
+    }
+  }
+
+  try {
+    const hash = (await provider.request({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from: session.uaAddress,
+          to: USDC_ARBITRUM,
+          data,
+          value: "0x0",
+        },
+      ],
+    })) as string;
+    if (!hash?.startsWith("0x")) {
+      throw new Error("Wallet did not return a transaction hash.");
+    }
+    return { tx_hash: hash, amount_usdc: rawToUsdc(amountRaw) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/insufficient|gas required/i.test(message)) {
+      throw new Error(
+        "Send needs a Magic confirm. If it failed, the gasless path missed — try again, or keep a little ETH on Arbitrum in this account.",
+      );
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
 }
 
 export async function logout(): Promise<void> {

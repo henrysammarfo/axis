@@ -137,5 +137,16 @@
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+[data-sonner-toast] {
+  max-width: min(22rem, calc(100vw - 2rem)) !important;
+}
+[data-sonner-toast] [data-description] {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 

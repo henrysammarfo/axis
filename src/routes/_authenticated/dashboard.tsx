@@ -5,6 +5,7 @@ import { useMemo, useEffect, useRef, useState } from "react";
 import { FixedFooter } from "../../components/brand/FixedChrome";
 import { MobileMenu } from "../../components/brand/MobileMenu";
 import { Logo } from "../../components/brand/Logo";
+import { AxisAvatar } from "../../components/brand/AxisAvatar";
 import {
   Wallet,
   Sparkles,
@@ -54,11 +55,11 @@ import {
   useApplyRoute,
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
+import { userFacingError } from "../../lib/user-error";
 
-import { truncateAddress } from "../../lib/api";
+import { truncateAddress, axisApi } from "../../lib/api";
 import { brandHeadMeta } from "../../lib/seo";
 import { useProfile } from "../../hooks/useProfile";
-import { resolveAvatarSrc } from "../../lib/profile";
 import {
   GOALS,
   RISKS,
@@ -126,11 +127,11 @@ function EmptyState({ message }: { message: string }) {
   return <div className="p-10 text-center text-white/40 text-sm">{message}</div>;
 }
 
-function Sparkline({ points }: { points: number[] }) {
+function Sparkline({ points, empty }: { points: number[]; empty: string }) {
   if (points.length < 2 || points.every((p) => p === 0)) {
     return (
       <div className="h-full grid place-items-center text-xs text-white/30 uppercase tracking-widest">
-        No yield history yet
+        {empty}
       </div>
     );
   }
@@ -202,6 +203,8 @@ function Dashboard() {
   const [budget, setBudget] = useState(500);
   const [menuOpen, setMenuOpen] = useState(false);
   const [rebalanceText, setRebalanceText] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [axisReply, setAxisReply] = useState("");
   const [activating, setActivating] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [savingStrategy, setSavingStrategy] = useState(false);
@@ -259,7 +262,7 @@ function Dashboard() {
         })
         .catch((e: Error) => {
           activatedRef.current = false;
-          toast.error("Setup failed", { description: e.message });
+          toast.error("Setup failed", { description: userFacingError(e, "Refresh and try again.") });
         })
         .finally(() => setActivating(false));
     }
@@ -289,7 +292,7 @@ function Dashboard() {
       setPendingRisk(null);
       setPendingGoal(null);
       toast.error("Couldn't update", {
-        description: e instanceof Error ? e.message : "Try again in a moment.",
+        description: userFacingError(e, "Try again in a moment."),
       });
     } finally {
       setSavingStrategy(false);
@@ -305,6 +308,14 @@ function Dashboard() {
 
   const onDeploy = async () => {
     if (!userId || !session.uaAddress) return;
+    const idle = route.data?.idle_usdc ?? route.data?.balances?.usdc;
+    if (idle != null && idle < 10) {
+      toast.error("Add USDC first", {
+        description:
+          "Send at least $10 native USDC on Arbitrum to your AXIS address, then tap Begin.",
+      });
+      return;
+    }
     setDeploying(true);
     try {
       const ready = await ensureHandsOffSilent();
@@ -327,7 +338,7 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Nothing to put to work yet", {
-        description: e instanceof Error ? e.message : "Add USDC on Arbitrum, then tap Begin.",
+        description: userFacingError(e, "Add USDC on Arbitrum, then tap Begin."),
       });
     } finally {
       setDeploying(false);
@@ -358,7 +369,7 @@ function Dashboard() {
       setEditingBudget(false);
     } catch (e) {
       toast.error("Couldn't update budget", {
-        description: e instanceof Error ? e.message : "Try again.",
+        description: userFacingError(e, "Try again."),
       });
     }
   };
@@ -412,31 +423,42 @@ function Dashboard() {
   };
 
   const onRebalance = async () => {
-    if (!rebalanceText.trim() || !userId || !session.uaAddress) return;
+    const instruction = rebalanceText.trim();
+    if (!instruction || !userId || !session.uaAddress) return;
+    const wantsMove =
+      /\b(withdraw|cash out|pull out|invest now|put (it|\$?\d+) to work|deploy now)\b/i.test(
+        instruction,
+      );
+    const idle = route.data?.idle_usdc ?? route.data?.balances?.usdc ?? 0;
+    const invested = positions.some(
+      (p) => p.status !== "closed" && Number(p.amount_usdc) > 0.01,
+    );
+    setAsking(true);
     try {
-      // Hands-off mode: AXIS executes the move itself (no wallet popups).
-      if (handsOff) {
+      const ai = await axisApi.rebalance({
+        user_id: userId,
+        ua_address: session.uaAddress,
+        instruction,
+      });
+      const spoken = (ai.explanation || "Got it.").trim();
+      setAxisReply(spoken);
+      toast.success("AXIS", { description: spoken.slice(0, 160) });
+
+      if (wantsMove && handsOff && (idle >= 10 || invested)) {
         const res = await sessionRebalance.mutateAsync({
           user_id: userId,
           ua_address: session.uaAddress,
-          instruction: rebalanceText,
+          instruction,
         });
-        toast.success("AXIS is on it", {
-          description: (res.explanation || "Working on your request.").slice(0, 140),
-        });
-      } else {
-        const res = await rebalanceMutation.mutateAsync({
-          user_id: userId,
-          ua_address: session.uaAddress,
-          instruction: rebalanceText,
-        });
-        toast.success("AXIS heard you", { description: res.explanation.slice(0, 120) });
+        if (res.explanation) setAxisReply(res.explanation);
       }
       setRebalanceText("");
     } catch (e) {
       toast.error("Couldn't do that", {
-        description: e instanceof Error ? e.message : "Unknown error",
+        description: userFacingError(e, "Unknown error"),
       });
+    } finally {
+      setAsking(false);
     }
   };
 
@@ -457,7 +479,7 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't save that mix", {
-        description: e instanceof Error ? e.message : "Weights must add up to 100%.",
+        description: userFacingError(e, "Weights must add up to 100%."),
       });
     }
   };
@@ -472,7 +494,7 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't unlock the LP", {
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: userFacingError(e, "Please try again."),
       });
     }
   };
@@ -490,7 +512,7 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't open the LP", {
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: userFacingError(e, "Please try again."),
       });
     }
   };
@@ -513,7 +535,7 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't close the LP", {
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: userFacingError(e, "Please try again."),
       });
     }
   };
@@ -531,10 +553,10 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't add to GMX", {
-        description:
-          e instanceof Error
-            ? e.message
-            : "Make sure you hold a little ETH for the fee, then retry.",
+        description: userFacingError(
+          e,
+          "Make sure you hold a little ETH for the fee, then retry.",
+        ),
       });
     }
   };
@@ -557,7 +579,7 @@ function Dashboard() {
       });
     } catch (e) {
       toast.error("Couldn't close GMX", {
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: userFacingError(e, "Please try again."),
       });
     }
   };
@@ -644,7 +666,7 @@ function Dashboard() {
       route.refetch();
     } catch (e) {
       toast.error("Couldn't apply route", {
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: userFacingError(e, "Please try again."),
       });
     } finally {
       setApplyingRoute(false);
@@ -684,8 +706,8 @@ function Dashboard() {
               aria-label="Your profile"
               className="h-9 w-9 rounded-full overflow-hidden border border-white/20 hover:border-white/50 transition-colors shrink-0"
             >
-              <img
-                src={resolveAvatarSrc(profile.avatar)}
+              <AxisAvatar
+                avatar={profile.avatar}
                 alt="Profile"
                 className="h-full w-full object-cover"
               />
@@ -853,7 +875,16 @@ function Dashboard() {
                 <div className="mt-6 h-20 sm:h-24 text-[color:var(--color-lime)]">
                   <Sparkline
                     points={
-                      positions.length ? positions.map((p) => Number(p.estimated_apy) || 0) : [0, 0]
+                      positions.length
+                        ? positions.map((p) => Number(p.estimated_apy) || 0)
+                        : (route.data?.route.quotes ?? [])
+                            .map((q) => Number(q.apy) || 0)
+                            .filter((n) => n > 0)
+                    }
+                    empty={
+                      route.isFetching
+                        ? "Scanning live yields…"
+                        : "Waiting on live venue APYs"
                     }
                   />
                 </div>
@@ -872,7 +903,12 @@ function Dashboard() {
                     </p>
                     <button
                       onClick={onDeploy}
-                      disabled={deploying || !session.uaAddress}
+                      disabled={
+                        deploying ||
+                        !session.uaAddress ||
+                        ((route.data?.idle_usdc ?? route.data?.balances?.usdc ?? 0) < 10 &&
+                          route.data != null)
+                      }
                       className="mt-4 bg-[color:var(--color-lime)] text-black rounded-full px-6 py-3 text-xs uppercase tracking-widest font-medium disabled:opacity-50 cursor-pointer"
                     >
                       {deploying
@@ -993,18 +1029,25 @@ function Dashboard() {
                   <input
                     value={rebalanceText}
                     onChange={(e) => setRebalanceText(e.target.value)}
-                    placeholder="Play it safer for a while"
+                    placeholder="What's earning the most right now?"
                     className="flex-1 bg-white/5 border border-white/10 rounded-md px-4 py-3 text-sm outline-none focus:border-white/30"
                     onKeyDown={(e) => e.key === "Enter" && onRebalance()}
                   />
                   <button
                     onClick={onRebalance}
-                    disabled={rebalancing || !userId}
+                    disabled={asking || rebalancing || !userId}
                     className="shrink-0 bg-white text-black rounded-full px-5 py-3 text-xs uppercase tracking-widest disabled:opacity-50"
                   >
-                    {rebalancing ? "…" : "Ask"}
+                    {asking || rebalancing ? "…" : "Ask"}
                   </button>
                 </div>
+                {axisReply ? (
+                  <p className="mt-3 text-sm text-white/70 leading-relaxed">{axisReply}</p>
+                ) : (
+                  <p className="mt-3 text-[10px] uppercase tracking-widest text-white/30">
+                    Questions get an answer. Withdraw / invest only runs if you have USDC.
+                  </p>
+                )}
               </div>
 
               {/* Smart route — best-yield router across every venue */}

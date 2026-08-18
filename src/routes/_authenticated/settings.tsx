@@ -1,15 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Check, Copy, ExternalLink, LogOut } from "lucide-react";
 import { Route as AuthenticatedRoute } from "../_authenticated";
 import { brandHeadMeta } from "../../lib/seo";
 import { useProfile } from "../../hooks/useProfile";
-import { resolveAvatarSrc, nameFromEmail } from "../../lib/profile";
+import { AxisAvatar } from "../../components/brand/AxisAvatar";
 import { useAxisStatus } from "../../hooks/useAxis";
-import { logout } from "../../lib/wallet";
+import { getIdleUsdcBalance, logout, sendUsdcToAddress } from "../../lib/wallet";
+import { userFacingError } from "../../lib/user-error";
 import { arbiscanBaseUrl, chainDisplayName } from "../../lib/chain";
 import { truncateAddress } from "../../lib/api";
+import { nameFromEmail } from "../../lib/profile";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () =>
@@ -21,6 +23,108 @@ export const Route = createFileRoute("/_authenticated/settings")({
     }),
   component: SettingsPage,
 });
+
+function WithdrawUsdc({
+  uaAddress,
+  investedUsdc,
+}: {
+  uaAddress: string;
+  investedUsdc: number;
+}) {
+  const explorer = arbiscanBaseUrl();
+  const [idle, setIdle] = useState<number | null>(null);
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getIdleUsdcBalance(uaAddress)
+      .then((n) => {
+        if (active) setIdle(n);
+      })
+      .catch(() => {
+        if (active) setIdle(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [uaAddress]);
+
+  const available = (idle ?? 0) + Math.max(0, investedUsdc);
+  const onSend = async () => {
+    const parsed = amount.trim() ? Number(amount) : undefined;
+    if (parsed != null && !Number.isFinite(parsed)) {
+      toast.error("Amount must be a number");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await sendUsdcToAddress({ to, amountUsdc: parsed });
+      toast.success(`Sent $${res.amount_usdc.toFixed(2)} USDC`, {
+        description: "Check Arbiscan — this one send is signed by you.",
+      });
+      window.open(`${explorer}/tx/${res.tx_hash}`, "_blank", "noopener,noreferrer");
+      setAmount("");
+      const next = await getIdleUsdcBalance(uaAddress).catch(() => 0);
+      setIdle(next);
+    } catch (e) {
+      toast.error("Couldn’t send USDC", {
+        description: userFacingError(e, "Try again."),
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg tracking-[-0.02em]">Withdraw USDC</h2>
+      <p className="text-sm text-white/45 leading-relaxed">
+        Send idle USDC to MetaMask or an exchange on Arbitrum One. If it’s still in Aave, AXIS pulls
+        it out first (no popup). The send itself needs one Magic confirm — AXIS cannot move money to
+        another address on its own.
+      </p>
+      <div className="card-calm p-5 space-y-4">
+        <p className="text-sm text-white/70">
+          Available · ${available.toFixed(2)}
+          {investedUsdc > 0.01 ? ` · $${investedUsdc.toFixed(2)} still in Aave` : ""}
+        </p>
+        <label className="block space-y-1.5">
+          <span className="text-xs text-white/40">Destination (Arbitrum)</span>
+          <input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="0x…"
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full bg-white/5 border border-white/10 rounded-md px-4 py-3 text-sm outline-none focus:border-white/30 font-mono"
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs text-white/40">Amount · leave blank to send all</span>
+          <input
+            type="number"
+            min={0.01}
+            step={0.01}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={available > 0 ? available.toFixed(2) : "10.00"}
+            className="w-full bg-white/5 border border-white/10 rounded-md px-4 py-3 text-sm outline-none focus:border-white/30"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={sending || !to.trim()}
+          className="w-full bg-white text-black rounded-full px-5 py-3 text-sm disabled:opacity-50"
+        >
+          {sending ? "Sending…" : "Send USDC"}
+        </button>
+      </div>
+    </section>
+  );
+}
 
 function CopyRow({ label, value, href }: { label: string; value: string; href?: string }) {
   const [copied, setCopied] = useState(false);
@@ -105,8 +209,8 @@ function SettingsPage() {
         {/* Identity */}
         <section className="card-calm p-6">
           <div className="flex items-center gap-4">
-            <img
-              src={resolveAvatarSrc(profile.avatar)}
+            <AxisAvatar
+              avatar={profile.avatar}
               alt="Your avatar"
               className="h-16 w-16 rounded-full object-cover border border-white/10 bg-white/5 shrink-0"
             />
@@ -172,6 +276,16 @@ function SettingsPage() {
             <CopyRow label="User ID" value={session.userId} />
           </div>
         </section>
+
+        <WithdrawUsdc
+          uaAddress={session.uaAddress}
+          investedUsdc={(status?.positions ?? [])
+            .filter(
+              (p) =>
+                p.status !== "closed" && String(p.protocol || "").toLowerCase().includes("aave"),
+            )
+            .reduce((sum, p) => sum + Number(p.amount_usdc || 0), 0)}
+        />
 
         {/* Session */}
         <section className="space-y-3">

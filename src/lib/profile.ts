@@ -8,14 +8,14 @@ export type AxisAvatar = {
   label: string;
 };
 
-// AXIS herself — portrait variations of the model (see public/avatars).
+// Geometric AXIS marks (inline SVG in AxisAvatar) — photo files were never shipped.
 export const AXIS_AVATARS: AxisAvatar[] = [
-  { id: "axis-01", src: "/avatars/axis-01.webp", label: "Studio" },
-  { id: "axis-02", src: "/avatars/axis-02.webp", label: "Neon" },
-  { id: "axis-03", src: "/avatars/axis-03.webp", label: "Profile" },
-  { id: "axis-04", src: "/avatars/axis-04.webp", label: "Hooded" },
-  { id: "axis-05", src: "/avatars/axis-05.webp", label: "Soft" },
-  { id: "axis-06", src: "/avatars/axis-06.webp", label: "Lime" },
+  { id: "axis-01", src: "axis-01", label: "Studio" },
+  { id: "axis-02", src: "axis-02", label: "Neon" },
+  { id: "axis-03", src: "axis-03", label: "Profile" },
+  { id: "axis-04", src: "axis-04", label: "Hooded" },
+  { id: "axis-05", src: "axis-05", label: "Soft" },
+  { id: "axis-06", src: "axis-06", label: "Lime" },
 ];
 
 export const DEFAULT_AVATAR_ID = AXIS_AVATARS[0].id;
