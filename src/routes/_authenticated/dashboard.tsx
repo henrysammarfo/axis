@@ -5,7 +5,6 @@ import { useMemo, useEffect, useRef, useState } from "react";
 import { FixedFooter } from "../../components/brand/FixedChrome";
 import { MobileMenu } from "../../components/brand/MobileMenu";
 import { Logo } from "../../components/brand/Logo";
-import { AxisAvatar } from "../../components/brand/AxisAvatar";
 import {
   Wallet,
   Sparkles,
@@ -60,6 +59,7 @@ import { userFacingError } from "../../lib/user-error";
 import { truncateAddress, axisApi } from "../../lib/api";
 import { brandHeadMeta } from "../../lib/seo";
 import { useProfile } from "../../hooks/useProfile";
+import { resolveAvatarSrc } from "../../lib/profile";
 import {
   GOALS,
   RISKS,
@@ -706,8 +706,8 @@ function Dashboard() {
               aria-label="Your profile"
               className="h-9 w-9 rounded-full overflow-hidden border border-white/20 hover:border-white/50 transition-colors shrink-0"
             >
-              <AxisAvatar
-                avatar={profile.avatar}
+              <img
+                src={resolveAvatarSrc(profile.avatar)}
                 alt="Profile"
                 className="h-full w-full object-cover"
               />

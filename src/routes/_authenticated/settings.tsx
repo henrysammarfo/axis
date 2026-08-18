@@ -5,13 +5,12 @@ import { ArrowLeft, Check, Copy, ExternalLink, LogOut } from "lucide-react";
 import { Route as AuthenticatedRoute } from "../_authenticated";
 import { brandHeadMeta } from "../../lib/seo";
 import { useProfile } from "../../hooks/useProfile";
-import { AxisAvatar } from "../../components/brand/AxisAvatar";
 import { useAxisStatus } from "../../hooks/useAxis";
 import { getIdleUsdcBalance, logout, sendUsdcToAddress } from "../../lib/wallet";
 import { userFacingError } from "../../lib/user-error";
 import { arbiscanBaseUrl, chainDisplayName } from "../../lib/chain";
 import { truncateAddress } from "../../lib/api";
-import { nameFromEmail } from "../../lib/profile";
+import { nameFromEmail, resolveAvatarSrc } from "../../lib/profile";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () =>
@@ -209,8 +208,8 @@ function SettingsPage() {
         {/* Identity */}
         <section className="card-calm p-6">
           <div className="flex items-center gap-4">
-            <AxisAvatar
-              avatar={profile.avatar}
+            <img
+              src={resolveAvatarSrc(profile.avatar)}
               alt="Your avatar"
               className="h-16 w-16 rounded-full object-cover border border-white/10 bg-white/5 shrink-0"
             />
