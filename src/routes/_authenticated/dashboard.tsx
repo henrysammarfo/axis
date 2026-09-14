@@ -26,8 +26,10 @@ import {
   CheckCircle2,
   X,
   Pencil,
+  PieChart,
 } from "lucide-react";
 import { Route as AuthenticatedRoute } from "../_authenticated";
+import { BasketBuilder } from "../../components/basket/BasketBuilder";
 import {
   actionsToAgentFeed,
   actionsToOrders,
@@ -96,7 +98,7 @@ function riskChip(tier: string): string {
   return "border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)]";
 }
 
-const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
+const tabSchema = z.enum(["overview", "vaults", "baskets", "agent", "orders", "merch"]);
 const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
 const dashSearch = z.object({
   tab: fallback(tabSchema, "overview").default("overview"),
@@ -153,11 +155,12 @@ function Sparkline({ points, empty }: { points: number[]; empty: string }) {
   );
 }
 
-type Tab = "overview" | "vaults" | "agent" | "orders" | "merch";
+type Tab = "overview" | "vaults" | "baskets" | "agent" | "orders" | "merch";
 
 const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
   { id: "overview", label: "Overview", icon: Layers },
   { id: "vaults", label: "Vaults", icon: Shield },
+  { id: "baskets", label: "Baskets", icon: PieChart },
   { id: "agent", label: "Agent Log", icon: Bot },
   { id: "orders", label: "Orders", icon: Activity },
   { id: "merch", label: "Merch", icon: Package },
@@ -1528,6 +1531,8 @@ function Dashboard() {
               </div>
             </>
           )}
+
+          {tab === "baskets" && <BasketBuilder userId={userId} />}
 
           {tab === "vaults" && (
             <div className="space-y-4">

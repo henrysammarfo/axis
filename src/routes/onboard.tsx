@@ -10,6 +10,7 @@ import {
   isOAuthCallback,
   warmupWalletSdk,
   walletConfigErrors,
+  type WalletSession,
 } from "../lib/wallet";
 import { useAxisConfig, useStrategyPreview } from "../hooks/useAxis";
 import { brandHeadMeta } from "../lib/seo";
@@ -45,6 +46,15 @@ export const Route = createFileRoute("/onboard")({
   component: Onboard,
 });
 
+function goAfterLogin(session: WalletSession, navigate: ReturnType<typeof useNavigate>) {
+  // Returning users already have an agent — never force "Build your agent" again.
+  if (session.agentReady) {
+    navigate({ to: "/dashboard", search: { tab: "overview", chain: "All" } });
+    return true;
+  }
+  return false;
+}
+
 function Onboard() {
   const navigate = useNavigate();
   const { data: config, isError: configError, error: configLoadError } = useAxisConfig();
@@ -67,7 +77,14 @@ function Onboard() {
     let active = true;
 
     (async () => {
-      if (!isOAuthCallback()) return;
+      // Already signed in (e.g. refresh on /onboard) — resume and route correctly.
+      if (!isOAuthCallback()) {
+        const existing = await resumeSession();
+        if (!active || !existing) return;
+        if (goAfterLogin(existing, navigate)) return;
+        setStep(2);
+        return;
+      }
 
       setLoading(true);
       setLoadingLabel("Upgrading account (gasless)…");
@@ -76,13 +93,17 @@ function Onboard() {
         const fromOAuth = await handleOAuthRedirect();
         if (!active) return;
         if (fromOAuth) {
+          if (goAfterLogin(fromOAuth, navigate)) return;
           setStep(2);
           return;
         }
 
         const existing = await resumeSession();
         if (!active) return;
-        if (existing) setStep(2);
+        if (existing) {
+          if (goAfterLogin(existing, navigate)) return;
+          setStep(2);
+        }
       } catch (e) {
         if (active) {
           setError(e instanceof Error ? e.message : "Login failed");
@@ -95,7 +116,7 @@ function Onboard() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [navigate]);
 
   const onLogin = async () => {
     if (!isWalletConfigured()) {
@@ -110,6 +131,7 @@ function Onboard() {
       const result = await loginWithGoogle();
       if (result.status === "session") {
         setLoadingLabel("Upgrading account (gasless)…");
+        if (goAfterLogin(result.session, navigate)) return;
         setStep(2);
         setLoading(false);
       }

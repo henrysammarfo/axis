@@ -32,7 +32,136 @@ export type AgentStatus = {
   market_risk_consent?: boolean;
   display_name?: string | null;
   avatar?: string | null;
+  stock_basket?: BasketPlan | null;
   x402_spend?: { total_spent_usdc: number; queries_made: number };
+};
+
+export type BasketLeg = {
+  symbol: string;
+  name: string;
+  address: string;
+  weight: number;
+  sector: string;
+  explorer_url: string;
+};
+
+export type BasketPlan = {
+  prompt: string;
+  theme: string;
+  oil_excluded: boolean;
+  chain_id: number;
+  network: string;
+  testnet: boolean;
+  budget_usdc: number;
+  legs: BasketLeg[];
+  english_summary: string;
+};
+
+export type RhTokenHolding = {
+  symbol: string;
+  name: string;
+  address: string;
+  raw: string;
+  balance: number;
+  decimals: number;
+  explorer_url: string;
+};
+
+export type RhHoldings = {
+  address: string;
+  chain_id: number;
+  network: string;
+  testnet: boolean;
+  explorer: string;
+  faucet_url: string;
+  eth_balance: number;
+  tokens: RhTokenHolding[];
+  agent_address?: string | null;
+  honesty: string;
+};
+
+export type RhHoldTx = {
+  symbol: string;
+  amount: number;
+  to: string;
+  token: string;
+  success: boolean;
+  tx_hash: string;
+  block?: number;
+  explorer_url: string;
+};
+
+export type RhHolds = {
+  status?: string;
+  mode?: string | null;
+  testnet?: boolean;
+  chain_id?: number;
+  faucet_url?: string;
+  agent_address?: string | null;
+  recipient?: string;
+  txs?: RhHoldTx[];
+  legs?: Array<{
+    symbol: string;
+    balance: number;
+    token: string;
+    explorer_url: string;
+    source?: string;
+  }>;
+  skipped?: Array<{ symbol: string; reason: string }>;
+  coverage?: {
+    status: string;
+    wanted: string[];
+    present: string[];
+    missing: string[];
+    coverage: number;
+  };
+  recorded_at?: string;
+  honesty?: string;
+  holdings_snapshot?: RhHoldings;
+  history?: Array<Record<string, unknown>>;
+};
+
+export type RhReadiness = {
+  chain_id: number;
+  network: string;
+  testnet: boolean;
+  faucet_url: string;
+  wanted: string[];
+  can_fund: boolean;
+  can_sync: boolean;
+  next_step: string;
+  honesty: string;
+  agent: {
+    address?: string | null;
+    eth_balance: number;
+    can_fund_dust?: boolean;
+    coverage?: RhHolds["coverage"];
+  };
+  user: {
+    address?: string | null;
+    can_sync?: boolean;
+    coverage?: RhHolds["coverage"];
+  };
+};
+
+export type LiquidityRails = {
+  title: string;
+  honesty: string;
+  lesson: string;
+  rails: Array<{
+    id: string;
+    label: string;
+    chain_id: number | null;
+    role: string;
+    assets: string[];
+    status: string;
+    proof?: string;
+    rpc?: string;
+    explorer?: string;
+    faucet?: string;
+    notes: string;
+  }>;
+  demo_path: string[];
 };
 
 export type ConfigStatus = {
@@ -200,6 +329,11 @@ export const axisApi = {
       sra_address?: string;
       eip7702_tx_hash?: string;
       eip7702_delegated?: boolean;
+      active?: boolean;
+      agent_ready?: boolean;
+      risk_level?: string;
+      goal?: string;
+      budget_usdc?: number;
     }>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({
@@ -461,6 +595,85 @@ export const axisApi = {
 
   history: (userId: string) =>
     request<{ actions: ActionEntry[] }>(`/api/portfolio/history/${userId}`),
+
+  basket: {
+    network: () =>
+      request<{
+        chain_id: number;
+        label: string;
+        rpc: string;
+        explorer: string;
+        testnet: boolean;
+        stock_count: number;
+        honesty: string;
+      }>("/api/basket/network"),
+    catalog: () =>
+      request<{ stocks: Array<Record<string, unknown>>; network: Record<string, unknown> }>(
+        "/api/basket/catalog",
+      ),
+    rails: () => request<LiquidityRails>("/api/basket/rails"),
+    faucet: () =>
+      request<{
+        faucet_url: string;
+        agent_address?: string | null;
+        chain_id: number;
+        network?: string;
+        testnet: boolean;
+        tokens?: string[];
+        honesty?: string;
+        error?: string;
+      }>("/api/basket/faucet"),
+    preview: (prompt: string, budget_usdc = 100) =>
+      request<{ plan: BasketPlan }>("/api/basket/preview", {
+        method: "POST",
+        body: JSON.stringify({ prompt, budget_usdc }),
+      }),
+    save: (userId: string, prompt: string, budget_usdc = 100) =>
+      request<{ status: string; plan: BasketPlan; holds?: RhHolds }>("/api/basket/save", {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId, prompt, budget_usdc }),
+      }),
+    get: (userId: string) =>
+      request<{
+        plan: BasketPlan | null;
+        holds: RhHolds | null;
+        network: Record<string, unknown>;
+        faucet_url: string;
+        ua_address?: string | null;
+        rails?: LiquidityRails;
+      }>(`/api/basket/${encodeURIComponent(userId)}`),
+    readiness: (userId: string) =>
+      request<{
+        readiness: RhReadiness;
+        plan: BasketPlan | null;
+        holds: RhHolds | null;
+        network: Record<string, unknown>;
+      }>(`/api/basket/${encodeURIComponent(userId)}/readiness`),
+    holdings: (userId: string) =>
+      request<{
+        holdings: RhHoldings;
+        holds: RhHolds | null;
+        plan: BasketPlan | null;
+        readiness: RhReadiness;
+        network: Record<string, unknown>;
+        rails: LiquidityRails;
+      }>(`/api/basket/${encodeURIComponent(userId)}/holdings`),
+    hold: (userId: string, opts?: { symbols?: string[]; dust?: number; mode?: "auto" | "fund" | "sync" }) =>
+      request<{
+        hold: RhHolds;
+        holdings: RhHoldings | null;
+        network: Record<string, unknown>;
+        rails: LiquidityRails;
+      }>("/api/basket/hold", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: userId,
+          symbols: opts?.symbols,
+          dust: opts?.dust ?? 0.01,
+          mode: opts?.mode ?? "auto",
+        }),
+      }),
+  },
 
   yields: {
     aave: (asset: string) =>

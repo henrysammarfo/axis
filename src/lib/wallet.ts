@@ -7,7 +7,8 @@
  * Sepolia shortcuts are demo-only and incomplete (see docs/PRODUCTION_AUDIT.md).
  *
  * Auth persistence: Magic SDK (per-device) + AXIS backend (cross-device profile).
- * Session state lives in memory only — restored via resumeSession() on each visit.
+ * Session state lives in memory and a non-secret local resume hint (userId/email/
+ * agentReady) so returning users skip "Build your agent" after Google.
  *
  * EIP-7702 flow matches Particle official Magic demo:
  * https://github.com/Particle-Network/ua-7702-magic-demo
@@ -39,6 +40,11 @@ export type WalletSession = {
   eip7702TxHash?: string;
   eip7702Delegated?: boolean;
   didToken: string;
+  /** True when this Magic user already created an agent (skip onboard step 2). */
+  agentReady?: boolean;
+  riskLevel?: string;
+  goal?: string;
+  budgetUsdc?: number;
 };
 
 type AxisMagic = Magic<[OAuthExtension, EVMExtension]>;
@@ -51,6 +57,61 @@ type ProvisionResult = {
 
 let memorySession: WalletSession | null = null;
 let magicSingleton: AxisMagic | null = null;
+
+const RESUME_HINT_KEY = "axis:resume_hint";
+
+type ResumeHint = {
+  userId: string;
+  email?: string;
+  uaAddress?: string;
+  agentReady?: boolean;
+  riskLevel?: string;
+  goal?: string;
+  budgetUsdc?: number;
+};
+
+function readResumeHint(): ResumeHint | null {
+  if (!isBrowser()) return null;
+  try {
+    const raw = window.localStorage.getItem(RESUME_HINT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ResumeHint;
+  } catch {
+    return null;
+  }
+}
+
+function writeResumeHint(session: WalletSession): void {
+  if (!isBrowser()) return;
+  try {
+    const hint: ResumeHint = {
+      userId: session.userId,
+      email: session.email,
+      uaAddress: session.uaAddress,
+      agentReady: session.agentReady,
+      riskLevel: session.riskLevel,
+      goal: session.goal,
+      budgetUsdc: session.budgetUsdc,
+    };
+    window.localStorage.setItem(RESUME_HINT_KEY, JSON.stringify(hint));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function clearResumeHint(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(RESUME_HINT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Non-secret last-login hint for UX (never clears on logout — same Google = same agent). */
+export function getResumeHint(): ResumeHint | null {
+  return readResumeHint();
+}
 
 function isBrowser(): boolean {
   return typeof window !== "undefined";
@@ -347,6 +408,11 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
     sra_address?: string;
     eip7702_tx_hash?: string;
     eip7702_delegated?: boolean;
+    active?: boolean;
+    agent_ready?: boolean;
+    risk_level?: string;
+    goal?: string;
+    budget_usdc?: number;
   };
 
   let auth: AuthProfile;
@@ -415,8 +481,13 @@ async function finalizeSession(magic: AxisMagic): Promise<WalletSession> {
     eip7702TxHash: auth.eip7702_tx_hash,
     eip7702Delegated: Boolean(auth.eip7702_delegated || auth.eip7702_tx_hash),
     didToken,
+    agentReady: Boolean(auth.agent_ready),
+    riskLevel: auth.risk_level,
+    goal: auth.goal,
+    budgetUsdc: auth.budget_usdc,
   };
   setMemorySession(session);
+  writeResumeHint(session);
 
   // Hands-off is part of account setup — not a later "sign to turn on" step.
   // Magic's signature UI is off by default, so this usually completes with no

@@ -16,6 +16,71 @@ class PortfolioTracker:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    async def get_user(self, user_id: str) -> User | None:
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        if not email:
+            return None
+        result = await self.db.execute(select(User).where(User.email == email.lower().strip()))
+        # Also match legacy rows stored with mixed-case email.
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+        result = await self.db.execute(select(User).where(User.email == email.strip()))
+        return result.scalar_one_or_none()
+
+    async def rekey_user(self, old_id: str, new_id: str) -> User | None:
+        """Move a user row (and related logs) to a new Magic issuer id.
+
+        Needed when older rows truncated issuer to 64 chars and the live issuer is longer.
+        """
+        if not old_id or not new_id or old_id == new_id:
+            return await self.get_user(new_id)
+
+        existing_new = await self.get_user(new_id)
+        if existing_new:
+            return existing_new
+
+        old = await self.get_user(old_id)
+        if not old:
+            return None
+
+        # Detach values then recreate under the stable issuer.
+        payload = {
+            "email": old.email,
+            "ua_address": old.ua_address,
+            "sra_address": old.sra_address,
+            "eip7702_tx_hash": old.eip7702_tx_hash,
+            "eip7702_delegated": old.eip7702_delegated,
+            "risk_level": old.risk_level,
+            "goal": old.goal,
+            "budget_usdc": old.budget_usdc,
+            "active": old.active,
+            "session_key_approval": old.session_key_approval,
+            "session_key_signer": old.session_key_signer,
+            "session_active": old.session_active,
+            "custom_strategy": old.custom_strategy,
+            "market_risk_consent": old.market_risk_consent,
+            "display_name": old.display_name,
+            "avatar": old.avatar,
+            "stock_basket": old.stock_basket,
+        }
+        await self.db.delete(old)
+        await self.db.flush()
+
+        user = User(id=new_id, **payload)
+        self.db.add(user)
+
+        for model in (Position, ActionLog):
+            rows = await self.db.execute(select(model).where(model.user_id == old_id))
+            for row in rows.scalars().all():
+                row.user_id = new_id
+
+        await self.db.flush()
+        return user
+
     async def ensure_user(
         self,
         user_id: str,
@@ -25,14 +90,30 @@ class PortfolioTracker:
         eip7702_tx_hash: str | None = None,
         eip7702_delegated: bool | None = None,
     ) -> User:
-        if ua_address:
-            await assert_address_not_claimed(self, ua_address, user_id)
+        normalized_email = email.lower().strip() if email else None
 
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
+
+        # Same Google email under a different Magic issuer (e.g. old 64-char truncation)
+        # → rekey the existing row so portfolio / agent prefs survive logout.
+        if not user and normalized_email:
+            by_email = await self.get_user_by_email(normalized_email)
+            if by_email and by_email.id != user_id:
+                user = await self.rekey_user(by_email.id, user_id)
+
+        # Also recover when the wallet address is already ours under a stale issuer.
+        if not user and ua_address:
+            by_addr = await self.get_user_by_ua_address(ua_address)
+            if by_addr and by_addr.id != user_id:
+                user = await self.rekey_user(by_addr.id, user_id)
+
+        if ua_address:
+            await assert_address_not_claimed(self, ua_address, user_id)
+
         if user:
-            if email:
-                user.email = email
+            if normalized_email:
+                user.email = normalized_email
             if ua_address:
                 user.ua_address = normalize_address(ua_address)
             if sra_address:
@@ -45,7 +126,7 @@ class PortfolioTracker:
 
         user = User(
             id=user_id,
-            email=email,
+            email=normalized_email,
             ua_address=normalize_address(ua_address),
             sra_address=normalize_address(sra_address),
             eip7702_tx_hash=eip7702_tx_hash,
@@ -261,10 +342,6 @@ class PortfolioTracker:
             for a in actions
         ]
 
-    async def get_user(self, user_id: str) -> User | None:
-        result = await self.db.execute(select(User).where(User.id == user_id))
-        return result.scalar_one_or_none()
-
     async def get_user_by_ua_address(self, ua_address: str) -> User | None:
         normalized = normalize_address(ua_address)
         if not normalized:
@@ -303,4 +380,5 @@ class PortfolioTracker:
             "market_risk_consent": bool(user.market_risk_consent) if user else False,
             "display_name": user.display_name if user else None,
             "avatar": user.avatar if user else None,
+            "stock_basket": user.stock_basket if user else None,
         }

@@ -37,19 +37,19 @@ const STEPS = [
     icon: Zap,
     k: "04",
     t: "Execute",
-    d: "Universal Account settles across Arbitrum, Base, Optimism as one balance.",
+    d: "Universal Account settles on Arbitrum — deposits can arrive from Base, Optimism, or Ethereum via SRA.",
   },
   {
     icon: TrendingUp,
     k: "05",
     t: "Compound",
-    d: "Positions rebalance weekly. Yield reports in plain English.",
+    d: "Yield now. Stock-token baskets on Robinhood Chain next — reports stay in plain English.",
   },
   {
     icon: CircleDot,
     k: "06",
     t: "Withdraw",
-    d: "One tap. Any chain. Any token. Off-ramp on demand.",
+    d: "One tap. Funds settle back to you. You always own the account.",
   },
 ];
 

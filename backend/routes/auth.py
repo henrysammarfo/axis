@@ -70,6 +70,15 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
         eip7702_delegated=request.eip7702_delegated,
     )
 
+    # Returning users already have strategy / hands-off — frontend must skip
+    # "Build your agent" and go straight to the dashboard.
+    agent_ready = bool(
+        user.active
+        or (user.budget_usdc or 0) > 0
+        or user.session_key_approval
+        or user.session_active
+    )
+
     return {
         "user_id": user.id,
         "email": user.email,
@@ -77,6 +86,11 @@ async def register_user(request: RegisterRequest, db: AsyncSession = Depends(get
         "sra_address": user.sra_address,
         "eip7702_tx_hash": user.eip7702_tx_hash,
         "eip7702_delegated": bool(user.eip7702_delegated),
+        "active": bool(user.active),
+        "agent_ready": agent_ready,
+        "risk_level": user.risk_level,
+        "goal": user.goal,
+        "budget_usdc": float(user.budget_usdc or 0),
     }
 
 

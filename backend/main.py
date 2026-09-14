@@ -12,6 +12,7 @@ from config import get_settings, validate_startup_config
 from database import init_db
 from routes.agent import router as agent_router
 from routes.auth import router as auth_router
+from routes.basket import router as basket_router
 from routes.health import router as health_router
 from routes.portfolio import router as portfolio_router
 from vercel_path import unwrap_vercel_path
@@ -53,6 +54,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(portfolio_router, prefix="/api")
+app.include_router(basket_router, prefix="/api")
 
 
 @app.get("/")

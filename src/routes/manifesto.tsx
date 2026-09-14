@@ -19,9 +19,9 @@ const LINES = [
   "03 — We rebuilt the top of the stack.",
   "04 — Sign in with Google. AXIS becomes your account.",
   "05 — EIP-7702 upgrades your address in place. No migration.",
-  "06 — The agent operates every chain as one balance.",
-  "07 — You set a budget. You set a goal. AXIS executes.",
-  "08 — Weekly report: this many dollars became this many more.",
+  "06 — After login you never sign a transaction again.",
+  "07 — You set a budget. You set a goal. AXIS executes on Arbitrum.",
+  "08 — Next: real US stock tokens under the same experience.",
   "09 — Set. Forget. Earn.",
 ];
 
