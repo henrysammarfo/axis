@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ExternalLink, PieChart, Sparkles } from "lucide-react";
+import { Check, CheckCircle2, Copy, ExternalLink, PieChart, Sparkles } from "lucide-react";
 import { axisApi, type BasketPlan } from "../../lib/api";
 import { CHAIN_LOGOS, stockLogo } from "../../lib/logos";
 
@@ -29,6 +29,29 @@ function statusLabel(status?: string) {
     default:
       return status ?? "—";
   }
+}
+
+function CopyAddr({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="flex w-full items-start gap-2 text-left text-[11px] text-white/50 hover:text-white"
+      onClick={async () => {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      <span className="shrink-0 text-white/40">{label}</span>
+      <span className="min-w-0 break-all flex-1">{value}</span>
+      {copied ? (
+        <Check size={12} className="shrink-0 text-[color:var(--color-lime)]" />
+      ) : (
+        <Copy size={12} className="shrink-0" />
+      )}
+    </button>
+  );
 }
 
 export function BasketBuilder({ userId }: { userId: string }) {
@@ -240,9 +263,8 @@ export function BasketBuilder({ userId }: { userId: string }) {
               Faucet · fail-closed
             </div>
             <p className="leading-relaxed">
-              Claims are browser-only. Fund the <em className="text-white/80 not-italic">agent</em>{" "}
-              for gasless dust, and/or your <em className="text-white/80 not-italic">UA</em> then
-              Sync. AXIS never invents fills.
+              Claims are browser-only. Copy addresses below, claim ETH + stock tokens, then Activate
+              hold. AXIS never invents fills.
             </p>
             <a
               href={FAUCET}
@@ -252,10 +274,10 @@ export function BasketBuilder({ userId }: { userId: string }) {
             >
               Open RH testnet faucet <ExternalLink size={12} />
             </a>
-            {agentAddr && (
-              <p className="text-[11px] break-all text-white/40">Agent: {agentAddr}</p>
-            )}
-            {ua && <p className="text-[11px] break-all text-white/40">Your UA: {ua}</p>}
+            <div className="space-y-2 pt-1">
+              {agentAddr && <CopyAddr label="Agent" value={agentAddr} />}
+              {ua && <CopyAddr label="Your UA" value={ua} />}
+            </div>
             <Link to="/proof" className="inline-flex items-center gap-1.5 text-white underline text-xs">
               Judge proof · RH txs <ExternalLink size={12} />
             </Link>

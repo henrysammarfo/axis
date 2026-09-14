@@ -46,7 +46,7 @@
 - [x] `/proof` RH section (testnet-labeled)  
 - [x] Real RH hold / faucet path (API + /proof; ops: fund AGENT_WALLET via faucet)  
 - [x] Arb/RH liquidity-rail map (`docs/LIQUIDITY_RAILS.md` + `GET /api/basket/rails`)  
-- [ ] HackQuest profile + demo video  
+- [ ] HackQuest profile + demo video → pack in `docs/OPEN_HOUSE_HACKQUEST.md` + `docs/OPEN_HOUSE_DEMO.md`  
 
 Keep: Magic · Particle UA · ZeroDev · deterministic strategy core.
 
