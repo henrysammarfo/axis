@@ -7,10 +7,9 @@ export const STOCK_LOGOS: Record<string, string> = {
   AMZN: "/logos/stocks/amzn.png",
   META: "/logos/stocks/meta.png",
   TSLA: "/logos/stocks/tsla.png",
-  // RH testnet faucet set (reuse closest brand marks until official kits)
-  AMD: "/logos/stocks/nvda.png",
-  NFLX: "/logos/stocks/meta.png",
-  PLTR: "/logos/stocks/googl.png",
+  AMD: "/logos/stocks/amd.svg",
+  NFLX: "/logos/stocks/nflx.svg",
+  PLTR: "/logos/stocks/pltr.svg",
 };
 
 export const CHAIN_LOGOS = {

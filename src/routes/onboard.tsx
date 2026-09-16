@@ -65,6 +65,7 @@ function Onboard() {
   const [budget, setBudget] = useState(100);
   const [risk, setRisk] = useState<RiskLevel>("moderate");
   const [goal, setGoal] = useState<GoalLabel>(GOALS[0]);
+  const [stockVibe, setStockVibe] = useState("tech yes, oil no");
   const session = getStoredSession();
 
   const { data: preview } = useStrategyPreview(budget, risk, goal, step === 2);
@@ -151,7 +152,15 @@ function Onboard() {
     }
     navigate({
       to: "/dashboard",
-      search: { tab: "overview", chain: "All", activate: "1", budget: String(budget), risk, goal },
+      search: {
+        tab: "baskets",
+        chain: "All",
+        activate: "1",
+        budget: String(budget),
+        risk,
+        goal,
+        prompt: stockVibe,
+      },
     });
   };
 
@@ -222,8 +231,8 @@ function Onboard() {
               <div>
                 <h1 className="text-4xl tracking-[-0.04em]">Build your agent</h1>
                 <p className="mt-3 text-white/60 text-sm">
-                  Pick a vibe and a goal. AXIS handles the rest. No deposit needed yet — add money
-                  whenever you like, okay AXIS once, and it invests hands-off from there.
+                  Pick a vibe and a goal. AXIS handles Arb yield. Then we open a RH stock basket
+                  from English — labeled public testnet, never a fake fill.
                 </p>
                 {session?.email && (
                   <p className="mt-2 text-xs text-white/40">Signed in as {session.email}</p>
@@ -290,6 +299,31 @@ function Onboard() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-widest text-white/50 mb-3">
+                  Stock vibe · Robinhood testnet
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {["tech yes, oil no", "steady tech only", "bold growth tech"].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setStockVibe(v)}
+                      className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-full border ${
+                        stockVibe === v
+                          ? "bg-[color:var(--color-lime)] text-black border-[color:var(--color-lime)]"
+                          : "border-white/20 text-white/70"
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-white/40 leading-relaxed">
+                  After your agent is live, AXIS opens Baskets with this English mix. Oil stays out.
+                </p>
               </div>
 
               {preview?.plan && (

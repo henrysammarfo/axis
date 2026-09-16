@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, ExternalLink, PieChart, Sparkles } from "lucide-react";
@@ -54,13 +54,20 @@ function CopyAddr({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function BasketBuilder({ userId }: { userId: string }) {
+export function BasketBuilder({
+  userId,
+  initialPrompt,
+}: {
+  userId: string;
+  initialPrompt?: string;
+}) {
   const qc = useQueryClient();
-  const [prompt, setPrompt] = useState("tech yes, oil no");
+  const [prompt, setPrompt] = useState(initialPrompt?.trim() || "tech yes, oil no");
   const [budget, setBudget] = useState(100);
   const [preview, setPreview] = useState<BasketPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [holdNote, setHoldNote] = useState<string | null>(null);
+  const autoPreviewed = useRef(false);
 
   const saved = useQuery({
     queryKey: ["axis", "basket", userId],
@@ -100,6 +107,15 @@ export function BasketBuilder({ userId }: { userId: string }) {
     },
     onError: (e: Error) => setError(e.message),
   });
+
+  useEffect(() => {
+    if (autoPreviewed.current) return;
+    if (!initialPrompt?.trim()) return;
+    if (saved.isLoading) return;
+    if (saved.data?.plan?.legs?.length) return;
+    autoPreviewed.current = true;
+    previewMut.mutate();
+  }, [initialPrompt, saved.isLoading, saved.data, previewMut]);
 
   const saveMut = useMutation({
     mutationFn: () => axisApi.basket.save(userId, prompt, budget),

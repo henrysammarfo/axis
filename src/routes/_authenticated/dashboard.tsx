@@ -108,6 +108,7 @@ const dashSearch = z.object({
   budget: z.string().optional(),
   risk: z.string().optional(),
   goal: z.string().optional(),
+  prompt: z.string().optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -169,7 +170,7 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
 
 function Dashboard() {
   const { session } = AuthenticatedRoute.useRouteContext();
-  const { tab, chain, activate, budget: budgetParam, risk, goal } = Route.useSearch();
+  const { tab, chain, activate, budget: budgetParam, risk, goal, prompt } = Route.useSearch();
   const navigate = useNavigate({ from: "/dashboard" });
   const userId = session.userId;
   const profile = useProfile(userId);
@@ -1561,7 +1562,9 @@ function Dashboard() {
             </>
           )}
 
-          {tab === "baskets" && <BasketBuilder userId={userId} />}
+          {tab === "baskets" && (
+            <BasketBuilder userId={userId} initialPrompt={prompt} />
+          )}
 
           {tab === "vaults" && (
             <div className="space-y-4">
