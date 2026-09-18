@@ -77,7 +77,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    from models import ActionLog, Position, User, X402Spend  # noqa: F401
+    from models import ActionLog, Position, User, WaitlistSignup, X402Spend  # noqa: F401
     from sqlalchemy import inspect, text
 
     async with engine.begin() as conn:
@@ -120,5 +120,7 @@ async def init_db() -> None:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN stock_basket JSON"))
             if "rh_holds" not in existing:
                 sync_conn.execute(text("ALTER TABLE users ADD COLUMN rh_holds JSON"))
+            if "retention_policy" not in existing:
+                sync_conn.execute(text("ALTER TABLE users ADD COLUMN retention_policy JSON"))
 
         await conn.run_sync(_migrate_user_columns)

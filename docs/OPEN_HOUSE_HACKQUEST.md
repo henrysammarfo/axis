@@ -15,7 +15,7 @@
 | **Team** | Henry Sam Marfo |
 | **Tagline** | Set. Forget. Earn — on real US stock tokens, not only crypto pools |
 | **8-second** | “Tech yes, oil no” → RH stock-token basket → weekly English report · Google · no MetaMask |
-| **Live demo** | https://axis-mainnet.vercel.app (Arb yield live; RH baskets on `feat/open-house-sg` preview after deploy) |
+| **Live demo** | Preview: https://axis-mainnet-nmp9z9xxm-teamtitanlink.vercel.app · Prod yield: https://axis-mainnet.vercel.app |
 | **Judge proof** | `/proof` after Google login — UA · EIP-7702 · SRA · RH testnet holds |
 | **Repo** | https://github.com/henrysammarfo/axis |
 | **Branch** | `feat/open-house-sg` |

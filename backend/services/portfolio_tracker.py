@@ -66,6 +66,8 @@ class PortfolioTracker:
             "display_name": old.display_name,
             "avatar": old.avatar,
             "stock_basket": old.stock_basket,
+            "rh_holds": old.rh_holds,
+            "retention_policy": old.retention_policy,
         }
         await self.db.delete(old)
         await self.db.flush()

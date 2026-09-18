@@ -47,6 +47,11 @@ function Proof() {
     queryFn: () => axisApi.basket.rails(),
   });
 
+  const usdg = useQuery({
+    queryKey: ["axis", "usdg-path"],
+    queryFn: () => axisApi.basket.usdg(),
+  });
+
   const liveUa = Boolean(session.uaAddress);
   const liveSra = Boolean(session.sraAddress);
   const live7702 = Boolean(session.eip7702Delegated || session.eip7702TxHash);
@@ -102,6 +107,10 @@ function Proof() {
     {
       label: "Arb↔RH rails map published",
       ok: Boolean(rails.data?.rails?.length),
+    },
+    {
+      label: "USDG path labeled (Paxos-verified, AXIS does not execute)",
+      ok: Boolean(usdg.data?.legs?.some((l) => l.address_verified)) && usdg.data?.axis_executes === false,
     },
   ];
 
@@ -351,6 +360,37 @@ function Proof() {
             </ul>
           </div>
         )}
+
+        {usdg.data && (
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            <div className="text-[10px] uppercase tracking-widest text-white/40">
+              {usdg.data.title}
+            </div>
+            <p className="text-xs text-white/60 leading-relaxed">{usdg.data.honesty}</p>
+            <ul className="space-y-2 text-xs text-white/70">
+              {usdg.data.legs
+                .filter((l) => l.asset === "USDG" || l.id === "usdg-lz-oft")
+                .map((l) => (
+                  <li key={l.id}>
+                    <span className="text-white">{l.label}</span> · {l.status}
+                    {l.explorer_url && (
+                      <div>
+                        <a
+                          href={l.explorer_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-[color:var(--color-lime)]"
+                        >
+                          {l.address?.slice(0, 12)}… explorer
+                        </a>
+                      </div>
+                    )}
+                  </li>
+                ))}
+            </ul>
+            <p className="text-[11px] text-white/40">{usdg.data.hackquest_note}</p>
+          </div>
+        )}
       </section>
 
       <section className="mt-6 border border-white/10 p-6 text-sm text-white/70 leading-relaxed">
@@ -372,7 +412,8 @@ function Proof() {
             </Link>
           </li>
           <li>Return here for live RH balances + explorer tx links</li>
-          <li>Deposit USDC via SRA · weekly report includes stock legs</li>
+          <li>Show USDG labeled path (Arb + RH mainnet explorers) — AXIS does not OFT</li>
+          <li>Deposit USDC via SRA · weekly report includes stock legs + fragmentation</li>
         </ol>
       </section>
     </div>

@@ -162,6 +162,171 @@ export type LiquidityRails = {
     notes: string;
   }>;
   demo_path: string[];
+  usdg?: {
+    axis_executes: boolean;
+    status: string;
+    source: string;
+    legs: Array<{
+      id: string;
+      label: string;
+      status: string;
+      address?: string | null;
+      explorer_url?: string | null;
+    }>;
+  };
+};
+
+export type UsdgPath = {
+  title: string;
+  status: string;
+  axis_executes: boolean;
+  honesty: string;
+  hackquest_note: string;
+  source: string;
+  verified_at: string;
+  legs: Array<{
+    id: string;
+    label: string;
+    chain: string;
+    chain_id: number | null;
+    asset: string;
+    role: string;
+    status: string;
+    address: string | null;
+    address_verified: boolean;
+    decimals?: number;
+    explorer_url?: string | null;
+    supply_control?: string;
+    notes: string;
+    layerzero?: Record<string, string | number>;
+  }>;
+  path_steps: Array<{
+    step: number;
+    title: string;
+    detail: string;
+    executable_today: boolean;
+  }>;
+  refuse: string[];
+};
+
+export type BeachheadGeo = {
+  region: string;
+  region_label: string;
+  beachhead: boolean;
+  beachhead_markets: string[];
+  axis_demo: {
+    arb_yield: boolean;
+    rh_testnet_stocks: boolean;
+    notes: string;
+  };
+  issuer_hints: {
+    ondo_xstocks_us_persons: string;
+    rh_classic_stock_tokens: string;
+    honesty: string;
+  };
+  gtm_message: string;
+  cta: string;
+};
+
+export type BeachheadPack = {
+  title: string;
+  wedge: string;
+  primary_markets: Array<{ id: string; label: string; why: string }>;
+  channels: Array<{ id: string; label: string; status: string }>;
+  regions: Array<{ id: string; label: string }>;
+  geo_law: string;
+  demo_script: {
+    title: string;
+    duration_min: number;
+    steps: Array<{ n: number; title: string; say: string; show: string; faucet?: string }>;
+    partner_ops: string[];
+  };
+  geo: BeachheadGeo;
+};
+
+export type PackageCatalog = {
+  title: string;
+  status: string;
+  axis_charges: boolean;
+  honesty: string;
+  revenue_thesis: string[];
+  packages: Array<{
+    id: string;
+    name: string;
+    price_usdc_mo: number;
+    status: string;
+    summary: string;
+    legs_hint: string[];
+  }>;
+  cta: string;
+};
+
+export type InstrumentTruth = {
+  instrument_id: string;
+  underlying: string;
+  display_symbol: string;
+  name: string;
+  issuer: string;
+  program: string;
+  claim_type: string;
+  claim_summary: string;
+  chain: string;
+  chain_id: number | null;
+  address: string | null;
+  address_verified: boolean;
+  explorer_url: string | null;
+  docs_url?: string | null;
+  mint_redeem: string;
+  mint_redeem_notes: string;
+  geo: {
+    eligible_hint?: string;
+    blocked_hint?: string;
+    us_persons?: string;
+  };
+  weekend_trading?: boolean;
+  is_share: boolean;
+  testnet: boolean;
+  axis_routeable: boolean;
+  honesty: string;
+  source?: string;
+  verified_at?: string | null;
+};
+
+export type FragmentationCompare = {
+  status: string;
+  underlying: string;
+  company?: Record<string, unknown>;
+  instruments: InstrumentTruth[];
+  verified_instruments?: InstrumentTruth[];
+  axis_routeable?: InstrumentTruth[];
+  diffs?: Array<{ field: string; values: Array<Record<string, unknown>> }>;
+  fungible: boolean;
+  axis_action: string;
+  primary_route?: InstrumentTruth | null;
+  warnings: string[];
+  honesty: string;
+};
+
+export type RetentionStatus = {
+  policy: {
+    cadence: "weekly" | "biweekly" | string;
+    weekday: string;
+    timezone: string;
+    include_arb_yield: boolean;
+    include_stock_legs: boolean;
+    include_fragmentation_warnings: boolean;
+    rebalance_mode: "report_only" | "suggest" | string;
+    honesty?: string;
+  };
+  next_due: string;
+  last_report_at?: string | null;
+  loop: {
+    has_basket: boolean;
+    hold_status: string;
+    retain_ready: boolean;
+  };
+  actions_this_cycle: string[];
+  honesty: string;
 };
 
 export type ConfigStatus = {
@@ -612,6 +777,34 @@ export const axisApi = {
         "/api/basket/catalog",
       ),
     rails: () => request<LiquidityRails>("/api/basket/rails"),
+    usdg: () => request<UsdgPath>("/api/basket/usdg"),
+    beachhead: (region?: string) =>
+      request<BeachheadPack>(
+        region
+          ? `/api/basket/beachhead?region=${encodeURIComponent(region)}`
+          : "/api/basket/beachhead",
+      ),
+    geo: (region: string) =>
+      request<BeachheadGeo>(`/api/basket/geo?region=${encodeURIComponent(region)}`),
+    waitlist: (body: {
+      email: string;
+      region?: string;
+      intent?: string;
+      user_id?: string;
+      note?: string;
+    }) =>
+      request<{
+        status: string;
+        email: string;
+        region: string;
+        intent: string;
+        geo: BeachheadGeo;
+        honesty: string;
+      }>("/api/basket/waitlist", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    packages: () => request<PackageCatalog>("/api/basket/packages"),
     faucet: () =>
       request<{
         faucet_url: string;
@@ -624,7 +817,11 @@ export const axisApi = {
         error?: string;
       }>("/api/basket/faucet"),
     preview: (prompt: string, budget_usdc = 100) =>
-      request<{ plan: BasketPlan }>("/api/basket/preview", {
+      request<{
+        plan: BasketPlan;
+        truth?: Record<string, unknown>;
+        fragmentation?: Record<string, { instrument_count: number; verified_count: number; fungible: boolean }>;
+      }>("/api/basket/preview", {
         method: "POST",
         body: JSON.stringify({ prompt, budget_usdc }),
       }),
@@ -641,6 +838,7 @@ export const axisApi = {
         faucet_url: string;
         ua_address?: string | null;
         rails?: LiquidityRails;
+        retention?: RetentionStatus;
       }>(`/api/basket/${encodeURIComponent(userId)}`),
     readiness: (userId: string) =>
       request<{
@@ -671,6 +869,60 @@ export const axisApi = {
           symbols: opts?.symbols,
           dust: opts?.dust ?? 0.01,
           mode: opts?.mode ?? "auto",
+        }),
+      }),
+    instruments: (underlying?: string) =>
+      request<{
+        instruments: InstrumentTruth[];
+        count: number;
+        underlying?: string;
+        honesty: string;
+      }>(
+        underlying
+          ? `/api/basket/instruments?underlying=${encodeURIComponent(underlying)}`
+          : "/api/basket/instruments",
+      ),
+    truth: (symbol: string) =>
+      request<{
+        underlying: string;
+        company: Record<string, unknown> | null;
+        primary_route: InstrumentTruth | null;
+        instrument_count: number;
+        verified_count: number;
+        honesty: string;
+      }>(`/api/basket/truth/${encodeURIComponent(symbol)}`),
+    fragmentationDesk: () =>
+      request<{
+        underlyings: Array<{
+          symbol: string;
+          name: string;
+          instrument_count: number;
+          verified_count: number;
+        }>;
+        honesty: string;
+      }>("/api/basket/fragmentation"),
+    fragmentation: (symbol: string) =>
+      request<FragmentationCompare>(`/api/basket/fragmentation/${encodeURIComponent(symbol)}`),
+    retention: (userId: string) =>
+      request<RetentionStatus>(`/api/basket/retention/${encodeURIComponent(userId)}`),
+    saveRetention: (
+      userId: string,
+      policy: Partial<RetentionStatus["policy"]> & {
+        cadence?: string;
+        rebalance_mode?: string;
+      },
+    ) =>
+      request<RetentionStatus>("/api/basket/retention", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: userId,
+          cadence: policy.cadence ?? "weekly",
+          weekday: policy.weekday ?? "monday",
+          timezone: policy.timezone ?? "UTC",
+          include_arb_yield: policy.include_arb_yield ?? true,
+          include_stock_legs: policy.include_stock_legs ?? true,
+          include_fragmentation_warnings: policy.include_fragmentation_warnings ?? true,
+          rebalance_mode: policy.rebalance_mode ?? "report_only",
         }),
       }),
   },

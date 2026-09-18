@@ -42,6 +42,8 @@ class User(Base):
     stock_basket: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Open House: RH testnet hold evidence (txs + balances snapshot).
     rh_holds: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Open House: Retention Agent schedule + policy (report_only / suggest).
+    retention_policy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -82,4 +84,18 @@ class X402Spend(Base):
     amount_usdc: Mapped[float] = mapped_column(Float)
     query: Mapped[str] = mapped_column(Text)
     paid: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WaitlistSignup(Base):
+    """Beachhead stock-path waitlist (EU/APAC GTM)."""
+
+    __tablename__ = "waitlist_signups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    region: Mapped[str] = mapped_column(String(32), default="prefer_not")
+    intent: Mapped[str] = mapped_column(String(64), default="stock_path")
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    note: Mapped[str | None] = mapped_column(String(280), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

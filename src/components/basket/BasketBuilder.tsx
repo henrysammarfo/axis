@@ -4,6 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, ExternalLink, PieChart, Sparkles } from "lucide-react";
 import { axisApi, type BasketPlan } from "../../lib/api";
 import { CHAIN_LOGOS, stockLogo } from "../../lib/logos";
+import { BeachheadPanel } from "./BeachheadPanel";
+import { FragmentationDesk } from "./FragmentationDesk";
+import { PackagesPanel } from "./PackagesPanel";
+import { RetentionPanel } from "./RetentionPanel";
+import { UsdgPathPanel } from "./UsdgPathPanel";
 
 const PROMPTS = [
   "tech yes, oil no",
@@ -400,6 +405,18 @@ export function BasketBuilder({
           )}
         </div>
       </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <FragmentationDesk symbols={plan?.legs?.map((l) => l.symbol)} />
+        <RetentionPanel userId={userId} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <UsdgPathPanel />
+        <BeachheadPanel userId={userId} />
+      </div>
+
+      <PackagesPanel />
     </div>
   );
 }
