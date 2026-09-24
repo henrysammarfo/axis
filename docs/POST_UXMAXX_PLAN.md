@@ -26,7 +26,10 @@
 - [x] Faucet path + RH hold API + `/proof` live balances/txs (ops: claim faucet for agent)
 - [x] Arb/RH liquidity-rail map (`docs/LIQUIDITY_RAILS.md` + API)
 - [x] **Depth layers 1–6** — truth · fragmentation · retention · USDG path · beachhead GTM · packages catalog (`docs/OPEN_HOUSE_DEEP_RELOCK.md`)
-- [ ] HackQuest profile + demo video
+- [x] Public `/demo/baskets` + capture assets (`docs/demo-assets/`)
+- [x] Live deploy FE+API on depth commit (Sep 24)
+- [ ] HackQuest form submit + demo video (YouTube)
+- [ ] Faucet ops: agent funded · Activate hold · `/proof` green for recording
 - [ ] Optional Alchemy RH RPC (public RPC OK for now)
 
 ## Keys
