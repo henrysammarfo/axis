@@ -15,6 +15,8 @@ import "../lib/process-polyfill";
 import { assertFrontendEnv } from "../lib/env";
 import { reportClientError } from "../lib/error-reporting";
 import { brandHeadMeta } from "../lib/seo";
+import { AnalyticsGate } from "../components/brand/AnalyticsGate";
+import { CookieConsent } from "../components/brand/CookieConsent";
 import { CustomCursor } from "../components/brand/CustomCursor";
 import { MobileBottomNav } from "../components/brand/MobileMenu";
 import { Toaster } from "../components/ui/sonner";
@@ -129,6 +131,8 @@ function RootComponent() {
       <Outlet />
       <Toaster theme="dark" />
       {showBottomNav && <MobileBottomNav />}
+      <CookieConsent />
+      <AnalyticsGate />
     </QueryClientProvider>
   );
 }

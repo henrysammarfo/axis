@@ -81,7 +81,13 @@ function InstrumentRow({ row }: { row: InstrumentTruth }) {
   );
 }
 
-export function FragmentationDesk({ symbols }: { symbols?: string[] }) {
+export function FragmentationDesk({
+  symbols,
+  className = "",
+}: {
+  symbols?: string[];
+  className?: string;
+}) {
   const choices = symbols?.length ? symbols : DEFAULT_SYMBOLS;
   const [symbol, setSymbol] = useState(choices[0] ?? "TSLA");
 
@@ -99,7 +105,7 @@ export function FragmentationDesk({ symbols }: { symbols?: string[] }) {
   const data = compare.data;
 
   return (
-    <div className="border border-white/10 p-5 sm:p-6 space-y-4">
+    <div className={`border border-white/10 p-5 sm:p-6 space-y-4 ${className}`}>
       <div className="flex items-start gap-3">
         <Layers size={18} className="mt-0.5 text-[color:var(--color-lime)] shrink-0" />
         <div>

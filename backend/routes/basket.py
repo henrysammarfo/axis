@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from dependencies import require_auth, require_own_user
+from rate_limit import limiter
 from services.beachhead import beachhead_pack, evaluate_geo, normalize_region
 from services.basket_policy import build_basket_from_english, catalog
 from services.fragmentation import compare_underlying, desk_catalog
@@ -65,6 +66,8 @@ class WaitlistBody(BaseModel):
     intent: str = Field(default="stock_path", max_length=64)
     user_id: str | None = None
     note: str | None = Field(default=None, max_length=280)
+    # Honeypot — bots fill this; humans never see it in the UI.
+    company_website: str | None = Field(default=None, max_length=200)
 
 
 def _wanted_from_user(user) -> list[str]:
@@ -136,10 +139,26 @@ async def basket_geo(region: str = "prefer_not"):
 
 
 @router.post("/waitlist")
+@limiter.limit("8/minute")
 async def basket_waitlist(
+    request: Request,
     body: WaitlistBody,
     db: AsyncSession = Depends(get_db),
 ):
+    # Honeypot trip — pretend success so scrapers don't retry craftily.
+    if body.company_website and body.company_website.strip():
+        return {
+            "status": "joined",
+            "email": body.email.strip().lower(),
+            "region": normalize_region(body.region),
+            "intent": body.intent,
+            "geo": evaluate_geo(body.region),
+            "honesty": (
+                "Waitlist records interest only — not eligibility, KYC, or a promise of mainnet "
+                "stock access."
+            ),
+        }
+
     email = body.email.strip().lower()
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(status_code=422, detail="Valid email required")

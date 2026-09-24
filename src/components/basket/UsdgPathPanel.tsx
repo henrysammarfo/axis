@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Link2 } from "lucide-react";
 import { axisApi } from "../../lib/api";
 
-export function UsdgPathPanel() {
+export function UsdgPathPanel({ className = "" }: { className?: string } = {}) {
   const q = useQuery({
     queryKey: ["axis", "usdg-path"],
     queryFn: () => axisApi.basket.usdg(),
@@ -11,7 +11,7 @@ export function UsdgPathPanel() {
   const data = q.data;
 
   return (
-    <div className="border border-white/10 p-5 sm:p-6 space-y-4">
+    <div className={`border border-white/10 p-5 sm:p-6 space-y-4 ${className}`}>
       <div className="flex items-start gap-3">
         <Link2 size={18} className="mt-0.5 text-[color:var(--color-lime)] shrink-0" />
         <div>

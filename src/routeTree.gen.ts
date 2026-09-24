@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VaultRouteImport } from './routes/vault'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardRouteImport } from './routes/onboard'
 import { Route as MerchRouteImport } from './routes/merch'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
@@ -25,6 +27,16 @@ import { Route as DemoBasketsRouteImport } from './routes/demo.baskets'
 const VaultRoute = VaultRouteImport.update({
   id: '/vault',
   path: '/vault',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardRoute = OnboardRouteImport.update({
@@ -89,6 +101,8 @@ export interface FileRoutesByFullPath {
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/vault': typeof VaultRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -102,6 +116,8 @@ export interface FileRoutesByTo {
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/vault': typeof VaultRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -117,6 +133,8 @@ export interface FileRoutesById {
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/vault': typeof VaultRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
@@ -132,6 +150,8 @@ export interface FileRouteTypes {
     | '/manifesto'
     | '/merch'
     | '/onboard'
+    | '/privacy'
+    | '/terms'
     | '/vault'
     | '/dashboard'
     | '/profile'
@@ -145,6 +165,8 @@ export interface FileRouteTypes {
     | '/manifesto'
     | '/merch'
     | '/onboard'
+    | '/privacy'
+    | '/terms'
     | '/vault'
     | '/dashboard'
     | '/profile'
@@ -159,6 +181,8 @@ export interface FileRouteTypes {
     | '/manifesto'
     | '/merch'
     | '/onboard'
+    | '/privacy'
+    | '/terms'
     | '/vault'
     | '/_authenticated/dashboard'
     | '/_authenticated/profile'
@@ -174,6 +198,8 @@ export interface RootRouteChildren {
   ManifestoRoute: typeof ManifestoRoute
   MerchRoute: typeof MerchRoute
   OnboardRoute: typeof OnboardRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   VaultRoute: typeof VaultRoute
 }
 
@@ -205,6 +231,20 @@ declare module '@tanstack/react-router' {
       path: '/manifesto'
       fullPath: '/manifesto'
       preLoaderRoute: typeof ManifestoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agent': {
@@ -292,6 +332,8 @@ const rootRouteChildren: RootRouteChildren = {
   ManifestoRoute: ManifestoRoute,
   MerchRoute: MerchRoute,
   OnboardRoute: OnboardRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   VaultRoute: VaultRoute,
 }
 export const routeTree = rootRouteImport

@@ -210,9 +210,10 @@ function Index() {
         <Link
           to="/onboard"
           className="font-tight text-white pointer-events-auto"
-          style={{ fontSize: 72, letterSpacing: "-0.04em", mixBlendMode: "exclusion" }}
+          style={{ fontSize: 56, letterSpacing: "-0.04em", mixBlendMode: "exclusion" }}
+          aria-label="Start with Google — onboard to AXIS"
         >
-          view
+          Start
         </Link>
       </div>
 
@@ -226,7 +227,12 @@ function Index() {
           <ScatteredGrid
             items={IMAGES.length}
             render={(i) => (
-              <img src={IMAGES[i]} alt="" loading="lazy" className="w-full h-full object-cover" />
+              <img
+                src={IMAGES[i]}
+                alt={`AXIS brand still ${i + 1}`}
+                loading="lazy"
+                className="w-full h-full object-cover"
+              />
             )}
           />
           <div className="h-[40vh]" />

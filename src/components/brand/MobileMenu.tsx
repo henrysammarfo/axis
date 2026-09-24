@@ -143,9 +143,16 @@ export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
             )}
           </nav>
-          <div className="absolute bottom-6 left-4 right-4 flex justify-between text-[10px] uppercase tracking-widest text-white/40">
+          <div className="absolute bottom-6 left-4 right-4 flex flex-wrap items-center justify-between gap-3 text-[10px] uppercase tracking-widest text-white/40">
             <span>AXIS (R) 2026</span>
-            <span>Set. Forget. Earn.</span>
+            <span className="flex gap-4">
+              <Link to="/privacy" onClick={onClose} className="hover:text-white">
+                Privacy
+              </Link>
+              <Link to="/terms" onClick={onClose} className="hover:text-white">
+                Terms
+              </Link>
+            </span>
           </div>
         </motion.div>
       )}

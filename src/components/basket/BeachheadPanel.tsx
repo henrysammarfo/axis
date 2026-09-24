@@ -6,13 +6,17 @@ import { axisApi } from "../../lib/api";
 export function BeachheadPanel({
   userId,
   email: initialEmail = "",
+  className = "",
 }: {
   userId?: string;
   email?: string;
+  className?: string;
 }) {
   const [region, setRegion] = useState("prefer_not");
   const [email, setEmail] = useState(initialEmail);
+  const [honeypot, setHoneypot] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const pack = useQuery({
     queryKey: ["axis", "beachhead", region],
@@ -26,18 +30,30 @@ export function BeachheadPanel({
         region,
         user_id: userId,
         intent: "stock_path",
+        company_website: honeypot || undefined,
       }),
     onSuccess: (data) => {
       setNote(`${data.status} · ${data.geo.gtm_message}`);
+      setEmailError(null);
     },
     onError: (err: Error) => setNote(err.message || "Waitlist failed"),
   });
+
+  const submit = () => {
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError("Enter a valid email");
+      return;
+    }
+    setEmailError(null);
+    join.mutate();
+  };
 
   const data = pack.data;
   const geo = data?.geo;
 
   return (
-    <div className="border border-white/10 p-5 sm:p-6 space-y-4">
+    <div className={`relative border border-white/10 p-5 sm:p-6 space-y-4 ${className}`}>
       <div className="flex items-start gap-3">
         <Globe2 size={18} className="mt-0.5 text-[color:var(--color-lime)] shrink-0" />
         <div>
@@ -89,17 +105,33 @@ export function BeachheadPanel({
       )}
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@email.com"
-          className="w-full bg-white/5 border border-white/15 rounded-full px-4 py-3 text-sm outline-none"
-        />
+        <div className="space-y-1.5">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@email.com"
+            autoComplete="email"
+            aria-invalid={Boolean(emailError)}
+            className="w-full bg-white/5 border border-white/15 rounded-full px-4 py-3 text-sm outline-none"
+          />
+          {emailError && <p className="px-2 text-xs text-red-300">{emailError}</p>}
+        </div>
+        {/* Honeypot — visually hidden from people, filled by bots */}
+        <label className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
+          Company website
+          <input
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+          />
+        </label>
         <button
           type="button"
           disabled={join.isPending || !email.trim()}
-          onClick={() => join.mutate()}
+          onClick={submit}
           className="bg-white text-black rounded-full px-6 py-3 text-xs uppercase tracking-widest disabled:opacity-50"
         >
           {join.isPending ? "Joining…" : "Join stock waitlist"}

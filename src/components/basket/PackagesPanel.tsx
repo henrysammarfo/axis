@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Package } from "lucide-react";
 import { axisApi } from "../../lib/api";
 
-export function PackagesPanel() {
+export function PackagesPanel({ className = "" }: { className?: string } = {}) {
   const q = useQuery({
     queryKey: ["axis", "packages"],
     queryFn: () => axisApi.basket.packages(),
@@ -10,7 +10,7 @@ export function PackagesPanel() {
   const data = q.data;
 
   return (
-    <div className="border border-white/10 p-5 sm:p-6 space-y-4">
+    <div className={`border border-white/10 p-5 sm:p-6 space-y-4 ${className}`}>
       <div className="flex items-start gap-3">
         <Package size={18} className="mt-0.5 text-[color:var(--color-lime)] shrink-0" />
         <div>
