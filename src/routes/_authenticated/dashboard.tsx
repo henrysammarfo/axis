@@ -26,8 +26,10 @@ import {
   CheckCircle2,
   X,
   Pencil,
+  PieChart,
 } from "lucide-react";
 import { Route as AuthenticatedRoute } from "../_authenticated";
+import { BasketBuilder } from "../../components/basket/BasketBuilder";
 import {
   actionsToAgentFeed,
   actionsToOrders,
@@ -55,6 +57,7 @@ import {
 } from "../../hooks/useAxis";
 import { toast } from "sonner";
 import { userFacingError } from "../../lib/user-error";
+import { useQuery } from "@tanstack/react-query";
 
 import { truncateAddress, axisApi } from "../../lib/api";
 import { brandHeadMeta } from "../../lib/seo";
@@ -96,7 +99,7 @@ function riskChip(tier: string): string {
   return "border-[color:var(--color-lime)]/40 text-[color:var(--color-lime)]";
 }
 
-const tabSchema = z.enum(["overview", "vaults", "agent", "orders", "merch"]);
+const tabSchema = z.enum(["overview", "vaults", "baskets", "agent", "orders", "merch"]);
 const chainSchema = z.enum(["All", "Arbitrum", "Base", "Optimism", "Ethereum"]);
 const dashSearch = z.object({
   tab: fallback(tabSchema, "overview").default("overview"),
@@ -105,6 +108,7 @@ const dashSearch = z.object({
   budget: z.string().optional(),
   risk: z.string().optional(),
   goal: z.string().optional(),
+  prompt: z.string().optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -153,11 +157,12 @@ function Sparkline({ points, empty }: { points: number[]; empty: string }) {
   );
 }
 
-type Tab = "overview" | "vaults" | "agent" | "orders" | "merch";
+type Tab = "overview" | "vaults" | "baskets" | "agent" | "orders" | "merch";
 
 const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
   { id: "overview", label: "Overview", icon: Layers },
   { id: "vaults", label: "Vaults", icon: Shield },
+  { id: "baskets", label: "Baskets", icon: PieChart },
   { id: "agent", label: "Agent Log", icon: Bot },
   { id: "orders", label: "Orders", icon: Activity },
   { id: "merch", label: "Merch", icon: Package },
@@ -165,13 +170,18 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
 
 function Dashboard() {
   const { session } = AuthenticatedRoute.useRouteContext();
-  const { tab, chain, activate, budget: budgetParam, risk, goal } = Route.useSearch();
+  const { tab, chain, activate, budget: budgetParam, risk, goal, prompt } = Route.useSearch();
   const navigate = useNavigate({ from: "/dashboard" });
   const userId = session.userId;
   const profile = useProfile(userId);
   const { data: axisStatus, isLoading } = useAxisStatus(userId);
   const { data: axisReport } = useAxisReport(userId);
   const { data: historyData } = useAxisHistory(userId);
+  const { data: basketPack } = useQuery({
+    queryKey: ["axis", "basket", userId],
+    queryFn: () => axisApi.basket.get(userId),
+    enabled: Boolean(userId),
+  });
   const activateMutation = useActivateAxis();
   const deployMutation = useDeployStrategy();
   const rebalanceMutation = useRebalanceAxis();
@@ -862,7 +872,8 @@ function Dashboard() {
                     Setting up your agent…
                   </p>
                 )}
-                {positions.length > 0 && axisReport?.report?.trim() && (
+                {(positions.length > 0 || Boolean(basketPack?.plan?.legs?.length)) &&
+                  axisReport?.report?.trim() && (
                   <div className="mt-5 border border-white/10 rounded-md p-4 max-w-prose">
                     <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
                       Weekly note
@@ -872,6 +883,28 @@ function Dashboard() {
                     </p>
                   </div>
                 )}
+
+                <div className="mt-5 border border-[color:var(--color-lime)]/25 bg-[color:var(--color-lime)]/5 p-4 max-w-prose">
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[color:var(--color-lime)]">
+                    <PieChart size={12} strokeWidth={1.75} />
+                    Open House · stock basket
+                  </div>
+                  <p className="mt-2 text-sm text-white/70 leading-relaxed">
+                    {basketPack?.plan?.legs?.length
+                      ? `${basketPack.plan.legs.map((l) => l.symbol).join(" · ")} · ${
+                          basketPack.holds?.status ?? "planned"
+                        } on RH testnet`
+                      : "Say “tech yes, oil no” — AXIS builds a RH stock-token mix. Oil stays out."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setTab("baskets")}
+                    className="mt-3 inline-flex items-center gap-1 text-xs uppercase tracking-widest text-white underline hover:text-[color:var(--color-lime)]"
+                  >
+                    {basketPack?.plan?.legs?.length ? "Manage basket" : "Build basket"}{" "}
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
                 <div className="mt-6 h-20 sm:h-24 text-[color:var(--color-lime)]">
                   <Sparkline
                     points={
@@ -1527,6 +1560,10 @@ function Dashboard() {
                 )}
               </div>
             </>
+          )}
+
+          {tab === "baskets" && (
+            <BasketBuilder userId={userId} initialPrompt={prompt} />
           )}
 
           {tab === "vaults" && (

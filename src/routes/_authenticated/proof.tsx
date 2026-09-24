@@ -1,7 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Route as AuthenticatedRoute } from "../_authenticated";
 import { useAxisConfig } from "../../hooks/useAxis";
+import { axisApi } from "../../lib/api";
 import { arbiscanBaseUrl, chainDisplayName } from "../../lib/chain";
+import { CHAIN_LOGOS, stockLogo } from "../../lib/logos";
 
 export const Route = createFileRoute("/_authenticated/proof")({
   head: () => ({
@@ -27,9 +30,43 @@ function Proof() {
   const explorer = arbiscanBaseUrl();
   const chainName = chainDisplayName();
 
+  const rh = useQuery({
+    queryKey: ["axis", "proof-rh", session.userId],
+    queryFn: () => axisApi.basket.holdings(session.userId),
+    enabled: Boolean(session.userId),
+    refetchInterval: 45_000,
+  });
+
+  const faucet = useQuery({
+    queryKey: ["axis", "basket-faucet"],
+    queryFn: () => axisApi.basket.faucet(),
+  });
+
+  const rails = useQuery({
+    queryKey: ["axis", "basket-rails"],
+    queryFn: () => axisApi.basket.rails(),
+  });
+
+  const usdg = useQuery({
+    queryKey: ["axis", "usdg-path"],
+    queryFn: () => axisApi.basket.usdg(),
+  });
+
   const liveUa = Boolean(session.uaAddress);
   const liveSra = Boolean(session.sraAddress);
   const live7702 = Boolean(session.eip7702Delegated || session.eip7702TxHash);
+
+  const holds = rh.data?.holds;
+  const holdings = rh.data?.holdings;
+  const readiness = rh.data?.readiness;
+  const holdTxs = holds?.txs ?? [];
+  const historyTxs =
+    holds?.history?.flatMap((h) => {
+      const txs = (h as { txs?: typeof holdTxs }).txs;
+      return Array.isArray(txs) ? txs : [];
+    }) ?? [];
+  const allTxs = [...holdTxs, ...historyTxs.filter((t) => !holdTxs.some((x) => x.tx_hash === t.tx_hash))];
+  const holdLive = holds?.status === "held" || holds?.status === "partial";
 
   const checks = [
     { label: "All backend keys configured", ok: config?.fully_configured },
@@ -55,6 +92,26 @@ function Proof() {
       ok: config?.intelligence.x402_wallet && config?.intelligence.x402_facilitator,
     },
     { label: "Google OAuth", ok: config?.wallet.google_oauth },
+    {
+      label: "RH testnet stock holdings readable",
+      ok: Boolean(holdings?.address),
+    },
+    {
+      label: "RH hold live (held/partial — fail-closed)",
+      ok: holdLive,
+    },
+    {
+      label: "RH testnet hold tx recorded",
+      ok: allTxs.length > 0 || Boolean(holds?.legs?.length),
+    },
+    {
+      label: "Arb↔RH rails map published",
+      ok: Boolean(rails.data?.rails?.length),
+    },
+    {
+      label: "USDG path labeled (Paxos-verified, AXIS does not execute)",
+      ok: Boolean(usdg.data?.legs?.some((l) => l.address_verified)) && usdg.data?.axis_executes === false,
+    },
   ];
 
   return (
@@ -65,7 +122,7 @@ function Proof() {
       <h1 className="mt-8 text-4xl tracking-[-0.04em]">Judge Proof Package</h1>
       <p className="mt-3 text-white/60 text-sm leading-relaxed">
         Live mainnet evidence — keys alone are not enough. Show UA address, EIP-7702 Type-4 hash,
-        and ZeroDev SRA.
+        and ZeroDev SRA. RH stock work is labeled public testnet.
       </p>
 
       {config?.missing_keys && config.missing_keys.length > 0 && (
@@ -146,6 +203,196 @@ function Proof() {
         </p>
       </section>
 
+      <section className="mt-6 border border-[color:var(--color-lime)]/30 bg-[color:var(--color-lime)]/5 p-6 text-sm space-y-4">
+        <div className="flex items-center gap-3">
+          <img src={CHAIN_LOGOS.robinhood} alt="" className="w-8 h-8 rounded-full bg-white/10" />
+          <h2 className="text-xs uppercase tracking-widest text-[color:var(--color-lime)]">
+            Open House · Robinhood Chain testnet
+          </h2>
+        </div>
+        <p className="text-white/70 leading-relaxed">
+          New stock work is on <strong className="text-white">Robinhood Chain public testnet
+          (46630)</strong> — labeled, not mainnet fills. Arb One yield stays live. Hold status:{" "}
+          <strong className="text-white">{holds?.status ?? "none"}</strong>
+          {readiness ? ` · next: ${readiness.next_step}` : ""}.
+        </p>
+        <ul className="space-y-2 text-white/60">
+          <li>RPC: https://rpc.testnet.chain.robinhood.com</li>
+          <li>
+            Explorer:{" "}
+            <a
+              href="https://explorer.testnet.chain.robinhood.com"
+              target="_blank"
+              rel="noreferrer"
+              className="underline text-white"
+            >
+              explorer.testnet.chain.robinhood.com
+            </a>
+          </li>
+          <li>
+            Faucet:{" "}
+            <a
+              href={holdings?.faucet_url ?? faucet.data?.faucet_url ?? "https://faucet.testnet.chain.robinhood.com"}
+              target="_blank"
+              rel="noreferrer"
+              className="underline text-white"
+            >
+              faucet.testnet.chain.robinhood.com
+            </a>
+          </li>
+          <li>
+            Basket builder:{" "}
+            <Link
+              to="/dashboard"
+              search={{ tab: "baskets", chain: "All" }}
+              className="underline text-white"
+            >
+              /dashboard?tab=baskets
+            </Link>
+          </li>
+          {(faucet.data?.agent_address || holdings?.agent_address) && (
+            <li className="break-all">
+              Agent faucet target: {faucet.data?.agent_address ?? holdings?.agent_address}
+            </li>
+          )}
+          {readiness && (
+            <li>
+              Readiness: fund={readiness.can_fund ? "yes" : "no"} · sync=
+              {readiness.can_sync ? "yes" : "no"}
+            </li>
+          )}
+        </ul>
+
+        {rh.isError && (
+          <p className="text-red-300/90 text-xs">
+            RH holdings fetch failed — check UA + RPC. {(rh.error as Error)?.message}
+          </p>
+        )}
+
+        {holdings && (
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            <div className="text-[10px] uppercase tracking-widest text-white/40">
+              Live balances · {holdings.eth_balance} ETH
+            </div>
+            <p className="text-[11px] text-white/40 break-all">UA on RH: {holdings.address}</p>
+            <ul className="space-y-2">
+              {holdings.tokens.map((t) => (
+                <li key={t.symbol} className="flex items-center gap-3">
+                  <img
+                    src={stockLogo(t.symbol) ?? CHAIN_LOGOS.robinhood}
+                    alt=""
+                    className="w-6 h-6 rounded-full bg-white/10 object-cover"
+                  />
+                  <span className="flex-1">{t.symbol}</span>
+                  <a
+                    href={t.explorer_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={t.balance > 0 ? "underline text-white" : "text-white/30"}
+                  >
+                    {t.balance}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="text-white/40 text-xs">{holdings.honesty}</p>
+          </div>
+        )}
+
+        <div className="space-y-2 border-t border-white/10 pt-4">
+          <div className="text-[10px] uppercase tracking-widest text-white/40">
+            Hold txs (real, testnet-labeled)
+          </div>
+          {allTxs.length === 0 ? (
+            <p className="text-white/50 text-xs leading-relaxed">
+              No hold txs yet. Claim faucet tokens for the agent address, save a basket, then
+              Activate hold on{" "}
+              <Link to="/dashboard" search={{ tab: "baskets", chain: "All" }} className="underline">
+                Baskets
+              </Link>
+              . Explorer links land here.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {allTxs.map((tx) => (
+                <li key={tx.tx_hash} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-[color:var(--color-lime)]">{tx.symbol}</span>
+                  <span className="text-white/40 text-xs">{tx.amount}</span>
+                  <a
+                    href={tx.explorer_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline break-all text-xs"
+                  >
+                    {tx.tx_hash}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {holds?.skipped && holds.skipped.length > 0 && (
+            <ul className="text-xs text-white/40 space-y-1 pt-2">
+              {holds.skipped.map((s) => (
+                <li key={`${s.symbol}-${s.reason}`}>
+                  Skipped {s.symbol}: {s.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          {holds?.honesty && <p className="text-white/40 text-xs pt-1">{holds.honesty}</p>}
+        </div>
+
+        {rails.data && (
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            <div className="text-[10px] uppercase tracking-widest text-white/40">
+              {rails.data.title}
+            </div>
+            <p className="text-xs text-white/60 leading-relaxed">{rails.data.honesty}</p>
+            <p className="text-xs text-white/40 leading-relaxed">{rails.data.lesson}</p>
+            <ul className="space-y-2 text-xs text-white/70">
+              {rails.data.rails.map((r) => (
+                <li key={r.id}>
+                  <span className="text-white">{r.label}</span> · {r.status}
+                  {r.chain_id != null ? ` · chain ${r.chain_id}` : ""}
+                  <div className="text-white/40 mt-0.5">{r.notes}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {usdg.data && (
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            <div className="text-[10px] uppercase tracking-widest text-white/40">
+              {usdg.data.title}
+            </div>
+            <p className="text-xs text-white/60 leading-relaxed">{usdg.data.honesty}</p>
+            <ul className="space-y-2 text-xs text-white/70">
+              {usdg.data.legs
+                .filter((l) => l.asset === "USDG" || l.id === "usdg-lz-oft")
+                .map((l) => (
+                  <li key={l.id}>
+                    <span className="text-white">{l.label}</span> · {l.status}
+                    {l.explorer_url && (
+                      <div>
+                        <a
+                          href={l.explorer_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-[color:var(--color-lime)]"
+                        >
+                          {l.address?.slice(0, 12)}… explorer
+                        </a>
+                      </div>
+                    )}
+                  </li>
+                ))}
+            </ul>
+            <p className="text-[11px] text-white/40">{usdg.data.hackquest_note}</p>
+          </div>
+        )}
+      </section>
+
       <section className="mt-6 border border-white/10 p-6 text-sm text-white/70 leading-relaxed">
         <h2 className="text-xs uppercase tracking-widest text-white/50 mb-3">Demo flow</h2>
         <ol className="list-decimal list-inside space-y-2">
@@ -159,12 +406,14 @@ function Proof() {
           <li>Confirm Type-4 hash + SRA on this page</li>
           <li>Set budget → Activate AXIS</li>
           <li>
-            View positions at{" "}
-            <Link to="/dashboard" className="underline">
-              /dashboard
+            Build “tech yes, oil no” basket → Save → Activate hold at{" "}
+            <Link to="/dashboard" search={{ tab: "baskets", chain: "All" }} className="underline">
+              /dashboard?tab=baskets
             </Link>
           </li>
-          <li>Deposit USDC via SRA from Base / OP / ETH / Arbitrum</li>
+          <li>Return here for live RH balances + explorer tx links</li>
+          <li>Show USDG labeled path (Arb + RH mainnet explorers) — AXIS does not OFT</li>
+          <li>Deposit USDC via SRA · weekly report includes stock legs + fragmentation</li>
         </ol>
       </section>
     </div>

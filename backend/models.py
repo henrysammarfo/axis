@@ -15,7 +15,8 @@ def utcnow() -> datetime:
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Magic issuer can exceed 64 chars (did:ethr:0x… / longer DIDs). Keep wide.
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ua_address: Mapped[str | None] = mapped_column(String(42), nullable=True, unique=True, index=True)
     sra_address: Mapped[str | None] = mapped_column(String(42), nullable=True)
@@ -37,6 +38,12 @@ class User(Base):
     # AXIS avatar id (e.g. "axis-03") or an uploaded image data URL, so use Text.
     display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     avatar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Open House: saved RH stock-token basket (English prefs → weights).
+    stock_basket: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Open House: RH testnet hold evidence (txs + balances snapshot).
+    rh_holds: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Open House: Retention Agent schedule + policy (report_only / suggest).
+    retention_policy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -45,7 +52,7 @@ class Position(Base):
     __tablename__ = "positions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String(255), index=True)
     protocol: Mapped[str] = mapped_column(String(32))
     asset: Mapped[str] = mapped_column(String(32))
     amount_usdc: Mapped[float] = mapped_column(Float)
@@ -61,7 +68,7 @@ class ActionLog(Base):
     __tablename__ = "action_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String(255), index=True)
     tool: Mapped[str] = mapped_column(String(64))
     action_input: Mapped[dict] = mapped_column(JSON)
     result: Mapped[dict] = mapped_column(JSON)
@@ -73,8 +80,22 @@ class X402Spend(Base):
     __tablename__ = "x402_spends"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String(255), index=True)
     amount_usdc: Mapped[float] = mapped_column(Float)
     query: Mapped[str] = mapped_column(Text)
     paid: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WaitlistSignup(Base):
+    """Beachhead stock-path waitlist (EU/APAC GTM)."""
+
+    __tablename__ = "waitlist_signups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    region: Mapped[str] = mapped_column(String(32), default="prefer_not")
+    intent: Mapped[str] = mapped_column(String(64), default="stock_path")
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    note: Mapped[str | None] = mapped_column(String(280), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

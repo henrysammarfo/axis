@@ -182,14 +182,64 @@ class AxisAgent:
     async def generate_weekly_report(self, user_id: str) -> str:
         positions = await self.tracker.get_positions(user_id)
         history = await self.tracker.get_weekly_actions(user_id)
+        user = await self.tracker.get_user(user_id)
+        basket = (user.stock_basket if user else None) or {}
 
         # Nothing to report yet — don't burn an AI call (and don't risk a reasoning
         # model rambling). The dashboard shows its own "agent is ready" empty state.
-        if not positions and not history:
+        if not positions and not history and not basket.get("legs"):
             return ""
 
+        basket_note = ""
+        if basket.get("legs"):
+            legs = ", ".join(
+                f"{int(float(leg.get('weight', 0)) * 100)}% {leg.get('symbol')}"
+                for leg in basket["legs"]
+            )
+            net = basket.get("network", "robinhood-testnet")
+            basket_note = (
+                f"Saved stock basket ({net}): {legs}. "
+                f"Summary: {basket.get('english_summary', '')}"
+            )
+
+        holds = (user.rh_holds if user else None) or {}
+        hold_status = holds.get("status") or "none"
+        hold_txs = holds.get("txs") or []
+        hold_legs = holds.get("legs") or []
+        hold_note = (
+            f"RH hold status={hold_status} (testnet={holds.get('testnet', True)}). "
+            f"Broadcast txs={len(hold_txs)}. Synced legs={len(hold_legs)}. "
+            f"Honesty: {holds.get('honesty', 'plan is not a fill')}"
+        )
+
+        retention = (user.retention_policy if user else None) or {}
+        frag_note = ""
+        if retention.get("include_fragmentation_warnings", True) and basket.get("legs"):
+            from services.fragmentation import compare_underlying
+
+            bits = []
+            for leg in basket["legs"][:5]:
+                sym = leg.get("symbol")
+                if not sym:
+                    continue
+                cmp = compare_underlying(str(sym))
+                bits.append(
+                    f"{sym}: {cmp.get('instrument_count', len(cmp.get('instruments') or []))} "
+                    f"instruments, fungible=false, axis_action={cmp.get('axis_action')}"
+                )
+            if bits:
+                frag_note = "Fragmentation desk: " + "; ".join(bits)
+
+        retain_note = (
+            f"Retention cadence={retention.get('cadence', 'weekly')}, "
+            f"rebalance_mode={retention.get('rebalance_mode', 'report_only')} "
+            f"(never silent stock fills)."
+        )
+
         prompt = f"""Write a weekly portfolio report for this user.
-Keep it under 120 words. Use plain English. No jargon. No preamble.
+Keep it under 140 words. Use plain English. No jargon. No preamble.
+Never invent stock fills or claim mainnet RH holdings if status is planned/awaiting_faucet.
+If fragmentation notes exist, warn that same ticker is not the same instrument.
 Reply with ONLY the report, in this format:
 What earned: ...
 What changed: ...
@@ -197,10 +247,34 @@ What AXIS did: ...
 What's next: ...
 
 Current positions: {json.dumps(positions)}
-Actions this week: {json.dumps(history)}"""
+Actions this week: {json.dumps(history)}
+Stock basket (Open House / RH — may be testnet plan): {basket_note or "none"}
+RH hold evidence: {hold_note}
+{frag_note or "Fragmentation: n/a"}
+{retain_note}"""
 
         provider = self.settings.ai_provider
         if provider not in ("venice", "openai"):
+            if basket_note:
+                next_line = {
+                    "held": "Keep oil excluded; check /proof for RH explorer links.",
+                    "partial": "Finish faucet for missing legs, then Activate hold again.",
+                    "awaiting_faucet": "Claim RH testnet faucet for agent and/or your wallet, then Activate hold.",
+                    "planned": "Activate hold after faucet — plan alone is not a fill.",
+                }.get(hold_status, "Activate hold when ready — oil stays excluded.")
+                frag_line = (
+                    f" Fragmentation: same company ≠ same instrument ({frag_note})."
+                    if frag_note
+                    else ""
+                )
+                return (
+                    f"What earned: Crypto yield positions as shown on the dashboard.\n"
+                    f"What changed: {basket_note} Hold: {hold_status} "
+                    f"({len(hold_txs)} tx, {len(hold_legs)} synced legs).{frag_line}\n"
+                    f"What AXIS did: Kept Set.Forget.Earn on Arbitrum; RH stock path labeled testnet; "
+                    f"retention {retention.get('cadence', 'weekly')} / {retention.get('rebalance_mode', 'report_only')}.\n"
+                    f"What's next: {next_line}"
+                )
             return "Your positions are open. Check the dashboard for live balances."
 
         try:

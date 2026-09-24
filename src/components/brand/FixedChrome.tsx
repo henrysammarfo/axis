@@ -64,11 +64,24 @@ export function FixedFooter({ id = "outro-footer" }: { id?: string }) {
   return (
     <div
       id={id}
-      className="fixed pointer-events-none z-20 text-white mix-exclusion font-tight uppercase flex gap-8 lg:gap-[80px] justify-between lg:justify-start w-[calc(100%-32px)] lg:w-auto"
+      className="fixed pointer-events-auto z-20 text-white mix-exclusion font-tight uppercase flex flex-wrap gap-6 lg:gap-[48px] justify-between lg:justify-start w-[calc(100%-32px)] lg:w-auto"
       style={{ left: 16, bottom: 24 }}
     >
-      <span className="text-[11px] lg:text-[13px] tracking-[-0.02em]">AXIS (R) 2026</span>
-      <span className="text-[11px] lg:text-[13px] tracking-[-0.02em]">PRIVACY POLICY</span>
+      <span className="text-[11px] lg:text-[13px] tracking-[-0.02em] pointer-events-none">
+        AXIS (R) 2026
+      </span>
+      <Link
+        to="/privacy"
+        className="text-[11px] lg:text-[13px] tracking-[-0.02em] hover:opacity-80"
+      >
+        Privacy
+      </Link>
+      <Link
+        to="/terms"
+        className="text-[11px] lg:text-[13px] tracking-[-0.02em] hover:opacity-80"
+      >
+        Terms
+      </Link>
     </div>
   );
 }

@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # Chain (dedicated RPC required — no public endpoint; Arbitrum One default)
     arbitrum_rpc: str = "https://arb1.arbitrum.io/rpc"
     arbitrum_chain_id: int = ARBITRUM_ONE_CHAIN_ID
+    # Robinhood Chain (optional — defaults to public testnet RPC for OH stock work)
+    robinhood_rpc: str = ""
 
     # x402 (required)
     x402_facilitator_url: str = "https://facilitator.payai.network"

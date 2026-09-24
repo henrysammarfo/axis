@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VaultRouteImport } from './routes/vault'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardRouteImport } from './routes/onboard'
 import { Route as MerchRouteImport } from './routes/merch'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
@@ -20,10 +22,21 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedProofRouteImport } from './routes/_authenticated/proof'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as DemoBasketsRouteImport } from './routes/demo.baskets'
 
 const VaultRoute = VaultRouteImport.update({
   id: '/vault',
   path: '/vault',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardRoute = OnboardRouteImport.update({
@@ -44,6 +57,11 @@ const ManifestoRoute = ManifestoRouteImport.update({
 const AgentRoute = AgentRouteImport.update({
   id: '/agent',
   path: '/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoBasketsRoute = DemoBasketsRouteImport.update({
+  id: '/demo/baskets',
+  path: '/demo/baskets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -79,9 +97,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent': typeof AgentRoute
+  '/demo/baskets': typeof DemoBasketsRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/vault': typeof VaultRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -91,9 +112,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent': typeof AgentRoute
+  '/demo/baskets': typeof DemoBasketsRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/vault': typeof VaultRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -105,9 +129,12 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/agent': typeof AgentRoute
+  '/demo/baskets': typeof DemoBasketsRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/vault': typeof VaultRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
@@ -119,9 +146,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agent'
+    | '/demo/baskets'
     | '/manifesto'
     | '/merch'
     | '/onboard'
+    | '/privacy'
+    | '/terms'
     | '/vault'
     | '/dashboard'
     | '/profile'
@@ -131,9 +161,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agent'
+    | '/demo/baskets'
     | '/manifesto'
     | '/merch'
     | '/onboard'
+    | '/privacy'
+    | '/terms'
     | '/vault'
     | '/dashboard'
     | '/profile'
@@ -144,9 +177,12 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/agent'
+    | '/demo/baskets'
     | '/manifesto'
     | '/merch'
     | '/onboard'
+    | '/privacy'
+    | '/terms'
     | '/vault'
     | '/_authenticated/dashboard'
     | '/_authenticated/profile'
@@ -158,9 +194,12 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AgentRoute: typeof AgentRoute
+  DemoBasketsRoute: typeof DemoBasketsRoute
   ManifestoRoute: typeof ManifestoRoute
   MerchRoute: typeof MerchRoute
   OnboardRoute: typeof OnboardRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   VaultRoute: typeof VaultRoute
 }
 
@@ -194,11 +233,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManifestoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agent': {
       id: '/agent'
       path: '/agent'
       fullPath: '/agent'
       preLoaderRoute: typeof AgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/baskets': {
+      id: '/demo/baskets'
+      path: '/demo/baskets'
+      fullPath: '/demo/baskets'
+      preLoaderRoute: typeof DemoBasketsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -268,9 +328,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AgentRoute: AgentRoute,
+  DemoBasketsRoute: DemoBasketsRoute,
   ManifestoRoute: ManifestoRoute,
   MerchRoute: MerchRoute,
   OnboardRoute: OnboardRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   VaultRoute: VaultRoute,
 }
 export const routeTree = rootRouteImport
