@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AXIS — Baskets depth demo</title>
+    <style>
+      :root {
+        --lime: #c8f542;
+        --bg: #000;
+        --muted: rgba(255, 255, 255, 0.55);
+        --line: rgba(255, 255, 255, 0.1);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+        background: #000;
+        color: #fff;
+        letter-spacing: -0.02em;
+      }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
+      .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--lime); }
+      h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 16px 0 8px; letter-spacing: -0.04em; }
+      .lede { color: var(--muted); max-width: 52ch; line-height: 1.5; font-size: 14px; }
+      .grid { display: grid; gap: 24px; margin-top: 40px; }
+      @media (min-width: 900px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+      .card {
+        border: 1px solid var(--line);
+        padding: 22px;
+        min-height: 280px;
+      }
+      .card h2 { font-size: 1.25rem; margin: 6px 0 8px; letter-spacing: -0.03em; }
+      .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: rgba(255,255,255,0.45); }
+      .muted { color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+      .chip {
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        background: transparent;
+        color: #fff;
+        cursor: pointer;
+      }
+      .chip.active { border-color: var(--lime); color: var(--lime); }
+      .row {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 12px 14px;
+        margin-top: 10px;
+      }
+      .row-top { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+      .warn { color: #fde68a; font-size: 12px; margin: 8px 0; line-height: 1.45; }
+      .step { display: flex; gap: 12px; border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin-top: 8px; font-size: 13px; }
+      .step b { color: var(--lime); }
+      a { color: #fff; }
+      code { font-size: 11px; color: rgba(255,255,255,0.45); word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="eyebrow">Demo · Open House depth · AXIS</div>
+      <h1>Baskets</h1>
+      <p class="lede">
+        Instrument truth · fragmentation · USDG path · EU/APAC beachhead · package catalog.
+        Fail-closed — same ticker ≠ same instrument. Plan ≠ fill.
+      </p>
+
+      <div class="grid two">
+        <section class="card" id="frag">
+          <div class="label">Fragmentation desk</div>
+          <h2>Same company · not the same instrument</h2>
+          <p class="muted" id="frag-honesty">Loading…</p>
+          <div class="chips" id="frag-chips"></div>
+          <div id="frag-body"></div>
+        </section>
+
+        <section class="card" id="usdg">
+          <div class="label">Layer 4 · USDG</div>
+          <h2 id="usdg-title">USDG path</h2>
+          <p class="muted" id="usdg-honesty"></p>
+          <div id="usdg-body"></div>
+        </section>
+      </div>
+
+      <div class="grid two" style="margin-top:24px">
+        <section class="card" id="beach">
+          <div class="label">Layer 5 · Beachhead</div>
+          <h2>EU / APAC · geo honesty</h2>
+          <p class="muted" id="beach-wedge"></p>
+          <div id="beach-body"></div>
+        </section>
+
+        <section class="card" id="pkg">
+          <div class="label">Layer 6 · Packages</div>
+          <h2 id="pkg-title">Packages</h2>
+          <p class="muted" id="pkg-honesty"></p>
+          <div id="pkg-body"></div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      async function load() {
+        const data = await fetch("./fixtures.json").then((r) => r.json());
+        const frag = data.frag;
+        const usdg = data.usdg;
+        const beach = { ...data.beach, geo: data.beach.geo || null };
+        // beachhead_pack doesn't include geo by default in fixtures — evaluate eu
+        const beachGeo = {
+          beachhead: true,
+          gtm_message:
+            "Primary beachhead: crypto-native EU/APAC users who already refuse MetaMask — continuity Google UA → Arb yield → labeled RH stock path.",
+          issuer_hints: { honesty: "AXIS does not replace issuer KYC/geo." },
+        };
+
+        document.getElementById("frag-honesty").textContent = frag.honesty;
+        const chips = document.getElementById("frag-chips");
+        ["TSLA", "AMZN", "AMD", "NFLX", "PLTR"].forEach((s, i) => {
+          const b = document.createElement("button");
+          b.className = "chip" + (s === "TSLA" ? " active" : "");
+          b.textContent = s;
+          chips.appendChild(b);
+        });
+        const body = document.getElementById("frag-body");
+        body.innerHTML =
+          `<div class="muted">${frag.company?.name || "TSLA"} · fungible: ${frag.fungible} · AXIS: ${frag.axis_action}</div>` +
+          (frag.warnings || [])
+            .slice(0, 3)
+            .map((w) => `<div class="warn">⚠ ${w}</div>`)
+            .join("") +
+          (frag.instruments || [])
+            .filter((i) => i.address_verified)
+            .map(
+              (i) => `<div class="row"><div class="row-top"><div>${i.display_symbol} · ${i.issuer}</div>
+              <div class="label">${i.axis_routeable ? "AXIS route" : "Compare only"}</div></div>
+              <div class="muted" style="margin-top:6px">${i.claim_summary}</div>
+              <code>${i.address || "unverified"}</code></div>`,
+            )
+            .join("");
+
+        document.getElementById("usdg-title").textContent = usdg.title;
+        document.getElementById("usdg-honesty").textContent = usdg.honesty;
+        document.getElementById("usdg-body").innerHTML =
+          `<div class="chip" style="display:inline-block;margin-bottom:10px;border-color:#fbbf24;color:#fde68a">AXIS executes · no</div>` +
+          (usdg.path_steps || [])
+            .map(
+              (s) =>
+                `<div class="step"><b>${s.step}</b><div><div>${s.title} <span class="label">${s.executable_today ? "live today" : "labeled only"}</span></div><div class="muted">${s.detail}</div></div></div>`,
+            )
+            .join("") +
+          (usdg.legs || [])
+            .filter((l) => l.asset === "USDG" || l.id === "usdg-lz-oft")
+            .map(
+              (l) =>
+                `<div class="row"><div class="row-top"><div>${l.label}</div><div class="label">${l.status}</div></div>
+                <code>${l.address || ""}</code><div class="muted" style="margin-top:6px">${l.notes}</div></div>`,
+            )
+            .join("");
+
+        document.getElementById("beach-wedge").textContent = beach.wedge;
+        document.getElementById("beach-body").innerHTML =
+          `<div class="muted">${beachGeo.gtm_message}</div>
+           <div class="chips"><span class="chip active">beachhead · yes</span><span class="chip">RH testnet demo · on</span></div>
+           <div class="label" style="margin-top:12px">${beach.demo_script.title} · ~${beach.demo_script.duration_min}m</div>` +
+          beach.demo_script.steps
+            .slice(0, 5)
+            .map((s) => `<div class="step"><b>${s.n}</b><div>${s.title} — <span class="muted">${s.say}</span></div></div>`)
+            .join("");
+
+        const pkg = data.pkg;
+        document.getElementById("pkg-title").textContent = pkg.title;
+        document.getElementById("pkg-honesty").textContent = pkg.honesty;
+        document.getElementById("pkg-body").innerHTML = pkg.packages
+          .map(
+            (p) =>
+              `<div class="row"><div class="row-top"><div>${p.name}</div><div class="label">${p.price_usdc_mo === 0 ? "included" : "$" + p.price_usdc_mo + "/mo"} · ${p.status}</div></div>
+              <div class="muted" style="margin-top:6px">${p.summary}</div></div>`,
+          )
+          .join("");
+      }
+      load().catch((e) => {
+        document.body.insertAdjacentHTML("beforeend", `<pre style="color:red;padding:24px">${e}</pre>`);
+      });
+    </script>
+  </body>
+</html>

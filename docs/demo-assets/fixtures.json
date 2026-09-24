@@ -1,0 +1,677 @@
+{
+  "usdg": {
+    "title": "USDG \u00b7 Arb One yield \u2194 RH stock path",
+    "status": "labeled_path",
+    "axis_executes": false,
+    "honesty": "USDG contracts below are Paxos-verified. AXIS labels the path for judges (Founder House prizes settle in USDG). We do not auto-bridge, mint, or invent fills. Live AXIS yield still settles in USDC on Arb One; RH stock work remains public testnet (46630) until mainnet stock registry depth is honest.",
+    "hackquest_note": "Buildathon prizes are largely USDC; Founder House Singapore prizes/grants are denominated in USDG. Showing a real USDG rail map is bonus honesty \u2014 not a claim that AXIS already routes user funds through OFT.",
+    "source": "https://docs.paxos.com/guides/stablecoin/usdg/mainnet",
+    "verified_at": "2026-09-18",
+    "legs": [
+      {
+        "id": "arb-yield-usdc",
+        "label": "Arbitrum One yield (live AXIS)",
+        "chain": "arbitrum-one",
+        "chain_id": 42161,
+        "asset": "USDC",
+        "role": "live_settlement",
+        "status": "live",
+        "address": null,
+        "address_verified": false,
+        "notes": "Current Set.Forget.Earn path. Not USDG \u2014 labeled so judges do not confuse live yield asset with the USDG bonus rail."
+      },
+      {
+        "id": "usdg-arbitrum",
+        "label": "USDG on Arbitrum One",
+        "chain": "arbitrum-one",
+        "chain_id": 42161,
+        "asset": "USDG",
+        "role": "stable_rail",
+        "status": "contract_verified",
+        "address": "0x004B506865409877C9fA29bfb1ebA929984B9bbC",
+        "address_verified": true,
+        "decimals": 6,
+        "explorer_url": "https://arbiscan.io/token/0x004B506865409877C9fA29bfb1ebA929984B9bbC",
+        "supply_control": "0x359a1Ee087abD3042151b93eC8EA462D6B27bcb6",
+        "notes": "Paxos Global Dollar on Arb. Thin supply vs other chains \u2014 still a real token, not marketing copy."
+      },
+      {
+        "id": "usdg-lz-oft",
+        "label": "LayerZero OFT (Arb \u2194 RH mainnet)",
+        "chain": "cross-chain",
+        "chain_id": null,
+        "asset": "USDG",
+        "role": "bridge_primitive",
+        "status": "issuer_path_documented",
+        "address": "0x0d54755f5106BfdB43f7a35f5D49a23F940628d1",
+        "address_verified": true,
+        "explorer_url": "https://robinhoodchain.blockscout.com/address/0x0d54755f5106BfdB43f7a35f5D49a23F940628d1",
+        "layerzero": {
+          "endpoint_v2": "0x6F475642a6e85809B1c36Fa62763669b1b48DD5B",
+          "eid_robinhood": 30416,
+          "oft_wrapper_rh": "0x0d54755f5106BfdB43f7a35f5D49a23F940628d1"
+        },
+        "notes": "Issuer/cross-chain primitive per Paxos. AXIS has no OFT send UI \u2014 fail-closed until a sponsored demo path ships."
+      },
+      {
+        "id": "usdg-rh-mainnet",
+        "label": "USDG on Robinhood Chain mainnet",
+        "chain": "robinhood-mainnet",
+        "chain_id": 4663,
+        "asset": "USDG",
+        "role": "rh_stable",
+        "status": "contract_verified",
+        "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+        "address_verified": true,
+        "decimals": 6,
+        "explorer_url": "https://robinhoodchain.blockscout.com/token/0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+        "supply_control": "0xdf5FfF9cb88B3cAb50572FAE73E2EB08599D25D4",
+        "notes": "Verified RH mainnet USDG. Separate from RH public testnet stock faucet."
+      },
+      {
+        "id": "rh-testnet-stocks",
+        "label": "RH public testnet stock tokens",
+        "chain": "robinhood-testnet",
+        "chain_id": 46630,
+        "asset": "stock_tokens",
+        "role": "stock_demo",
+        "status": "public_testnet",
+        "address": null,
+        "address_verified": false,
+        "notes": "AXIS stock holds live here. USDG is NOT claimed on testnet in this registry \u2014 do not invent a testnet USDG mint."
+      }
+    ],
+    "path_steps": [
+      {
+        "step": 1,
+        "title": "Earn on Arb One",
+        "detail": "Google UA \u00b7 USDC yield (live AXIS).",
+        "executable_today": true
+      },
+      {
+        "step": 2,
+        "title": "Hold / acquire USDG on Arb (optional)",
+        "detail": "Verified USDG token on Arb \u2014 user/issuer path; AXIS does not mint.",
+        "executable_today": false
+      },
+      {
+        "step": 3,
+        "title": "OFT to RH mainnet USDG",
+        "detail": "LayerZero OFT wrapper documented by Paxos \u2014 not AXIS-executed.",
+        "executable_today": false
+      },
+      {
+        "step": 4,
+        "title": "RH stock exposure",
+        "detail": "Demo: RH public testnet faucet + Activate hold. Mainnet stocks only when registry depth is verifiable.",
+        "executable_today": true
+      }
+    ],
+    "refuse": [
+      "No one-click Arb USDC \u2192 RH stock button",
+      "No invented USDG testnet faucet",
+      "No claiming OFT transfers AXIS did not broadcast"
+    ]
+  },
+  "frag": {
+    "status": "ok",
+    "underlying": "TSLA",
+    "company": {
+      "name": "Tesla, Inc.",
+      "isin": "US88160R1014",
+      "sector": "tech",
+      "exchange": "NASDAQ"
+    },
+    "instruments": [
+      {
+        "instrument_id": "rh-testnet:TSLA",
+        "underlying": "TSLA",
+        "display_symbol": "TSLA",
+        "name": "Tesla",
+        "issuer": "Robinhood (testnet Stock Token)",
+        "program": "robinhood_chain_testnet",
+        "claim_type": "broker_stock_token",
+        "claim_summary": "Testnet Stock Token for integration \u2014 not mainnet equity, not a Nasdaq share.",
+        "chain": "robinhood-testnet",
+        "chain_id": 46630,
+        "address": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "address_verified": true,
+        "explorer_url": "https://explorer.testnet.chain.robinhood.com/token/0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "docs_url": "https://docs.robinhood.com/chain/contracts/",
+        "mint_redeem": "faucet_only",
+        "mint_redeem_notes": "Browser faucet only. No AXIS mint path. Fail-closed if unfunded.",
+        "geo": {
+          "eligible_hint": "Developer testnet \u2014 not a retail offer",
+          "blocked_hint": "Do not treat as mainnet RH Stock Tokens / Classic EU products",
+          "us_persons": "n/a_testnet"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": true,
+        "axis_routeable": true,
+        "honesty": "Labeled public testnet. Plan \u2260 fill.",
+        "source": "rh_docs_contracts",
+        "verified_at": "2026-09-18"
+      },
+      {
+        "instrument_id": "ondo-eth:TSLAon",
+        "underlying": "TSLA",
+        "display_symbol": "TSLAon",
+        "name": "Tesla (Ondo Tokenized)",
+        "issuer": "Ondo Global Markets",
+        "program": "ondo_stocks",
+        "claim_type": "linked_tracker",
+        "claim_summary": "Debt / tracker instrument (ISIN VGG7001AAK03) giving economic exposure similar to TSLA with dividend reinvestment \u2014 not a Nasdaq share certificate.",
+        "chain": "ethereum",
+        "chain_id": 1,
+        "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+        "address_verified": true,
+        "explorer_url": "https://etherscan.io/token/0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+        "docs_url": "https://ondo.finance/gm",
+        "mint_redeem": "issuer_kyc_usdc",
+        "mint_redeem_notes": "Primary mint/redeem via Ondo GMTokenManager + USDon/USDC for eligible non-US users. AXIS does not mint Ondo \u2014 desk is compare-only until a live partner path ships.",
+        "geo": {
+          "eligible_hint": "Eligible non-US / KYC per Ondo terms",
+          "blocked_hint": "US persons and restricted jurisdictions blocked by issuer",
+          "us_persons": "typically_blocked"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": false,
+        "axis_routeable": false,
+        "honesty": "Verified Ethereum contract for compare desk \u2014 not an AXIS fill venue yet.",
+        "source": "etherscan_ondo_final_terms",
+        "verified_at": "2026-09-18"
+      },
+      {
+        "instrument_id": "xstocks-sol:TSLAx",
+        "underlying": "TSLA",
+        "display_symbol": "TSLAx",
+        "name": "Tesla xStock",
+        "issuer": "Backed Assets (JE) Limited",
+        "program": "xstocks",
+        "claim_type": "linked_tracker",
+        "claim_summary": "Tracker certificate (ISIN CH1436219252) 1:1 backed by custodied TSLA \u2014 economic exposure, not shareholder register entry.",
+        "chain": "solana",
+        "chain_id": null,
+        "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+        "address_verified": true,
+        "explorer_url": "https://solscan.io/token/XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+        "docs_url": "https://assets.backed.fi/products/tesla-xstock",
+        "mint_redeem": "issuer_kyc_primary",
+        "mint_redeem_notes": "Primary mint/redeem via Backed (KYC, market hours, minimums). Secondary on Solana DEXs. AXIS does not execute xStocks \u2014 compare-only.",
+        "geo": {
+          "eligible_hint": "Non-US eligible crypto participants per Backed terms",
+          "blocked_hint": "Not available to U.S. persons",
+          "us_persons": "blocked"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": false,
+        "axis_routeable": false,
+        "honesty": "Verified Solana mint for fragmentation desk \u2014 not fungible with RH or Ondo.",
+        "source": "backed_solflare",
+        "verified_at": "2026-09-18"
+      }
+    ],
+    "verified_instruments": [
+      {
+        "instrument_id": "rh-testnet:TSLA",
+        "underlying": "TSLA",
+        "display_symbol": "TSLA",
+        "name": "Tesla",
+        "issuer": "Robinhood (testnet Stock Token)",
+        "program": "robinhood_chain_testnet",
+        "claim_type": "broker_stock_token",
+        "claim_summary": "Testnet Stock Token for integration \u2014 not mainnet equity, not a Nasdaq share.",
+        "chain": "robinhood-testnet",
+        "chain_id": 46630,
+        "address": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "address_verified": true,
+        "explorer_url": "https://explorer.testnet.chain.robinhood.com/token/0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "docs_url": "https://docs.robinhood.com/chain/contracts/",
+        "mint_redeem": "faucet_only",
+        "mint_redeem_notes": "Browser faucet only. No AXIS mint path. Fail-closed if unfunded.",
+        "geo": {
+          "eligible_hint": "Developer testnet \u2014 not a retail offer",
+          "blocked_hint": "Do not treat as mainnet RH Stock Tokens / Classic EU products",
+          "us_persons": "n/a_testnet"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": true,
+        "axis_routeable": true,
+        "honesty": "Labeled public testnet. Plan \u2260 fill.",
+        "source": "rh_docs_contracts",
+        "verified_at": "2026-09-18"
+      },
+      {
+        "instrument_id": "ondo-eth:TSLAon",
+        "underlying": "TSLA",
+        "display_symbol": "TSLAon",
+        "name": "Tesla (Ondo Tokenized)",
+        "issuer": "Ondo Global Markets",
+        "program": "ondo_stocks",
+        "claim_type": "linked_tracker",
+        "claim_summary": "Debt / tracker instrument (ISIN VGG7001AAK03) giving economic exposure similar to TSLA with dividend reinvestment \u2014 not a Nasdaq share certificate.",
+        "chain": "ethereum",
+        "chain_id": 1,
+        "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+        "address_verified": true,
+        "explorer_url": "https://etherscan.io/token/0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+        "docs_url": "https://ondo.finance/gm",
+        "mint_redeem": "issuer_kyc_usdc",
+        "mint_redeem_notes": "Primary mint/redeem via Ondo GMTokenManager + USDon/USDC for eligible non-US users. AXIS does not mint Ondo \u2014 desk is compare-only until a live partner path ships.",
+        "geo": {
+          "eligible_hint": "Eligible non-US / KYC per Ondo terms",
+          "blocked_hint": "US persons and restricted jurisdictions blocked by issuer",
+          "us_persons": "typically_blocked"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": false,
+        "axis_routeable": false,
+        "honesty": "Verified Ethereum contract for compare desk \u2014 not an AXIS fill venue yet.",
+        "source": "etherscan_ondo_final_terms",
+        "verified_at": "2026-09-18"
+      },
+      {
+        "instrument_id": "xstocks-sol:TSLAx",
+        "underlying": "TSLA",
+        "display_symbol": "TSLAx",
+        "name": "Tesla xStock",
+        "issuer": "Backed Assets (JE) Limited",
+        "program": "xstocks",
+        "claim_type": "linked_tracker",
+        "claim_summary": "Tracker certificate (ISIN CH1436219252) 1:1 backed by custodied TSLA \u2014 economic exposure, not shareholder register entry.",
+        "chain": "solana",
+        "chain_id": null,
+        "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+        "address_verified": true,
+        "explorer_url": "https://solscan.io/token/XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+        "docs_url": "https://assets.backed.fi/products/tesla-xstock",
+        "mint_redeem": "issuer_kyc_primary",
+        "mint_redeem_notes": "Primary mint/redeem via Backed (KYC, market hours, minimums). Secondary on Solana DEXs. AXIS does not execute xStocks \u2014 compare-only.",
+        "geo": {
+          "eligible_hint": "Non-US eligible crypto participants per Backed terms",
+          "blocked_hint": "Not available to U.S. persons",
+          "us_persons": "blocked"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": false,
+        "axis_routeable": false,
+        "honesty": "Verified Solana mint for fragmentation desk \u2014 not fungible with RH or Ondo.",
+        "source": "backed_solflare",
+        "verified_at": "2026-09-18"
+      }
+    ],
+    "axis_routeable": [
+      {
+        "instrument_id": "rh-testnet:TSLA",
+        "underlying": "TSLA",
+        "display_symbol": "TSLA",
+        "name": "Tesla",
+        "issuer": "Robinhood (testnet Stock Token)",
+        "program": "robinhood_chain_testnet",
+        "claim_type": "broker_stock_token",
+        "claim_summary": "Testnet Stock Token for integration \u2014 not mainnet equity, not a Nasdaq share.",
+        "chain": "robinhood-testnet",
+        "chain_id": 46630,
+        "address": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "address_verified": true,
+        "explorer_url": "https://explorer.testnet.chain.robinhood.com/token/0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "docs_url": "https://docs.robinhood.com/chain/contracts/",
+        "mint_redeem": "faucet_only",
+        "mint_redeem_notes": "Browser faucet only. No AXIS mint path. Fail-closed if unfunded.",
+        "geo": {
+          "eligible_hint": "Developer testnet \u2014 not a retail offer",
+          "blocked_hint": "Do not treat as mainnet RH Stock Tokens / Classic EU products",
+          "us_persons": "n/a_testnet"
+        },
+        "weekend_trading": true,
+        "is_share": false,
+        "testnet": true,
+        "axis_routeable": true,
+        "honesty": "Labeled public testnet. Plan \u2260 fill.",
+        "source": "rh_docs_contracts",
+        "verified_at": "2026-09-18"
+      }
+    ],
+    "diffs": [
+      {
+        "field": "claim_type",
+        "values": [
+          {
+            "instrument_id": "rh-testnet:TSLA",
+            "display_symbol": "TSLA",
+            "value": "broker_stock_token"
+          },
+          {
+            "instrument_id": "ondo-eth:TSLAon",
+            "display_symbol": "TSLAon",
+            "value": "linked_tracker"
+          },
+          {
+            "instrument_id": "xstocks-sol:TSLAx",
+            "display_symbol": "TSLAx",
+            "value": "linked_tracker"
+          }
+        ]
+      },
+      {
+        "field": "issuer",
+        "values": [
+          {
+            "instrument_id": "rh-testnet:TSLA",
+            "display_symbol": "TSLA",
+            "value": "Robinhood (testnet Stock Token)"
+          },
+          {
+            "instrument_id": "ondo-eth:TSLAon",
+            "display_symbol": "TSLAon",
+            "value": "Ondo Global Markets"
+          },
+          {
+            "instrument_id": "xstocks-sol:TSLAx",
+            "display_symbol": "TSLAx",
+            "value": "Backed Assets (JE) Limited"
+          }
+        ]
+      },
+      {
+        "field": "chain",
+        "values": [
+          {
+            "instrument_id": "rh-testnet:TSLA",
+            "display_symbol": "TSLA",
+            "value": "robinhood-testnet"
+          },
+          {
+            "instrument_id": "ondo-eth:TSLAon",
+            "display_symbol": "TSLAon",
+            "value": "ethereum"
+          },
+          {
+            "instrument_id": "xstocks-sol:TSLAx",
+            "display_symbol": "TSLAx",
+            "value": "solana"
+          }
+        ]
+      },
+      {
+        "field": "mint_redeem",
+        "values": [
+          {
+            "instrument_id": "rh-testnet:TSLA",
+            "display_symbol": "TSLA",
+            "value": "faucet_only"
+          },
+          {
+            "instrument_id": "ondo-eth:TSLAon",
+            "display_symbol": "TSLAon",
+            "value": "issuer_kyc_usdc"
+          },
+          {
+            "instrument_id": "xstocks-sol:TSLAx",
+            "display_symbol": "TSLAx",
+            "value": "issuer_kyc_primary"
+          }
+        ]
+      },
+      {
+        "field": "testnet",
+        "values": [
+          {
+            "instrument_id": "rh-testnet:TSLA",
+            "display_symbol": "TSLA",
+            "value": true
+          },
+          {
+            "instrument_id": "ondo-eth:TSLAon",
+            "display_symbol": "TSLAon",
+            "value": false
+          },
+          {
+            "instrument_id": "xstocks-sol:TSLAx",
+            "display_symbol": "TSLAx",
+            "value": false
+          }
+        ]
+      },
+      {
+        "field": "axis_routeable",
+        "values": [
+          {
+            "instrument_id": "rh-testnet:TSLA",
+            "display_symbol": "TSLA",
+            "value": true
+          },
+          {
+            "instrument_id": "ondo-eth:TSLAon",
+            "display_symbol": "TSLAon",
+            "value": false
+          },
+          {
+            "instrument_id": "xstocks-sol:TSLAx",
+            "display_symbol": "TSLAx",
+            "value": false
+          }
+        ]
+      }
+    ],
+    "fungible": false,
+    "axis_action": "route_rh_testnet_only",
+    "primary_route": {
+      "instrument_id": "rh-testnet:TSLA",
+      "underlying": "TSLA",
+      "display_symbol": "TSLA",
+      "name": "Tesla",
+      "issuer": "Robinhood (testnet Stock Token)",
+      "program": "robinhood_chain_testnet",
+      "claim_type": "broker_stock_token",
+      "claim_summary": "Testnet Stock Token for integration \u2014 not mainnet equity, not a Nasdaq share.",
+      "chain": "robinhood-testnet",
+      "chain_id": 46630,
+      "address": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+      "address_verified": true,
+      "explorer_url": "https://explorer.testnet.chain.robinhood.com/token/0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+      "docs_url": "https://docs.robinhood.com/chain/contracts/",
+      "mint_redeem": "faucet_only",
+      "mint_redeem_notes": "Browser faucet only. No AXIS mint path. Fail-closed if unfunded.",
+      "geo": {
+        "eligible_hint": "Developer testnet \u2014 not a retail offer",
+        "blocked_hint": "Do not treat as mainnet RH Stock Tokens / Classic EU products",
+        "us_persons": "n/a_testnet"
+      },
+      "weekend_trading": true,
+      "is_share": false,
+      "testnet": true,
+      "axis_routeable": true,
+      "honesty": "Labeled public testnet. Plan \u2260 fill.",
+      "source": "rh_docs_contracts",
+      "verified_at": "2026-09-18"
+    },
+    "warnings": [
+      "Instruments are NOT fungible \u2014 do not average prices or bridge as if identical.",
+      "None of these tokens is a Nasdaq share certificate (is_share=false).",
+      "At least one issuer product blocks or restricts U.S. persons.",
+      "24/7 token markets can diverge from Nasdaq when the cash equity is closed."
+    ],
+    "honesty": "Fragmentation desk is read-only compare. AXIS fills only RH public testnet routeable legs after Activate hold \u2014 never invents Ondo/xStocks fills."
+  },
+  "beach": {
+    "title": "Beachhead GTM",
+    "wedge": "Distribution + account UX for crypto-native EU/APAC \u2014 not issuance, not Aave-wrapper, not borrow-against-TSLA.",
+    "primary_markets": [
+      {
+        "id": "eu",
+        "label": "European Union / EEA",
+        "why": "RH-eligible crypto users; Google continuity"
+      },
+      {
+        "id": "apac",
+        "label": "Asia-Pacific (ex-US)",
+        "why": "Open House SG beachhead; refuse MetaMask cohort"
+      }
+    ],
+    "channels": [
+      {
+        "id": "google_ua",
+        "label": "Google \u2192 UA onboard",
+        "status": "live"
+      },
+      {
+        "id": "hackquest",
+        "label": "HackQuest / Founder House demo",
+        "status": "in_progress"
+      },
+      {
+        "id": "partner_faucet",
+        "label": "Partner RH faucet script",
+        "status": "documented"
+      },
+      {
+        "id": "waitlist",
+        "label": "Stock-path waitlist",
+        "status": "live_api"
+      }
+    ],
+    "regions": [
+      {
+        "id": "eu",
+        "label": "European Union / EEA"
+      },
+      {
+        "id": "apac",
+        "label": "Asia-Pacific (ex-US)"
+      },
+      {
+        "id": "uk",
+        "label": "United Kingdom"
+      },
+      {
+        "id": "us",
+        "label": "United States"
+      },
+      {
+        "id": "ca",
+        "label": "Canada"
+      },
+      {
+        "id": "other",
+        "label": "Other"
+      },
+      {
+        "id": "prefer_not",
+        "label": "Prefer not to say"
+      }
+    ],
+    "geo_law": "Self-attestation only. No IP hard-block. No legal advice. Fail-closed on invented eligibility for Ondo/xStocks/RH Classic.",
+    "demo_script": {
+      "title": "Judge / partner faucet demo script",
+      "duration_min": 6,
+      "steps": [
+        {
+          "n": 1,
+          "title": "Google login",
+          "say": "Mom UX \u2014 no MetaMask. Magic + Particle + ZeroDev on Arbitrum One.",
+          "show": "/onboard \u2192 UA + EIP-7702 + SRA on /proof"
+        },
+        {
+          "n": 2,
+          "title": "Arb yield live",
+          "say": "Set.Forget.Earn stays on Arb. Stock work is additive, not a wrap of Aave.",
+          "show": "/dashboard Activate \u00b7 Type-4 + SRA evidence"
+        },
+        {
+          "n": 3,
+          "title": "English basket + oil block",
+          "say": "tech yes, oil no \u2014 BasketPolicy, not a fake index.",
+          "show": "/dashboard?tab=baskets \u2192 Preview \u2192 Save plan"
+        },
+        {
+          "n": 4,
+          "title": "Instrument truth + fragmentation",
+          "say": "Same ticker \u2260 same instrument. TSLA vs TSLAon vs TSLAx.",
+          "show": "Fragmentation desk \u00b7 verified explorers only"
+        },
+        {
+          "n": 5,
+          "title": "Faucet \u2192 Activate hold",
+          "say": "Browser faucet only. Fail-closed if unfunded \u2014 plan \u2260 fill.",
+          "show": "Claim faucet \u2192 Activate hold \u2192 /proof RH txs",
+          "faucet": "https://faucet.testnet.chain.robinhood.com"
+        },
+        {
+          "n": 6,
+          "title": "USDG labeled path",
+          "say": "Paxos-verified USDG on Arb + RH mainnet. AXIS does not OFT.",
+          "show": "USDG panel + /proof checklist"
+        },
+        {
+          "n": 7,
+          "title": "Retention",
+          "say": "Weekly English report + policy. Never silent stock fills.",
+          "show": "Retention panel \u00b7 report includes fragmentation warnings"
+        }
+      ],
+      "partner_ops": [
+        "Fund AGENT_WALLET on RH testnet via faucet before live demo",
+        "Copy agent + UA addresses for judges",
+        "Never claim mainnet RH stock fills",
+        "If faucet empty: sync-only after user claims to UA"
+      ]
+    }
+  },
+  "pkg": {
+    "title": "Package market (preview)",
+    "status": "catalog_only",
+    "axis_charges": false,
+    "honesty": "Read-only package cards for Open House revenue narrative. No checkout, no AUM fee collection, no invented subscribers. Live path remains free Arb yield + RH testnet stock demo.",
+    "revenue_thesis": [
+      "AUM-linked advisory / subscription for continuity accounts",
+      "Package marketplace take-rate on paid English strategies",
+      "Future mint/redeem partner fee share \u2014 not gas or faucet tips"
+    ],
+    "packages": [
+      {
+        "id": "tech-yes-oil-no",
+        "name": "Tech yes, oil no",
+        "price_usdc_mo": 0,
+        "status": "included",
+        "summary": "Default BasketPolicy \u2014 oil excluded, RH testnet tech set.",
+        "legs_hint": [
+          "TSLA",
+          "AMZN",
+          "AMD",
+          "NFLX",
+          "PLTR"
+        ]
+      },
+      {
+        "id": "steady-tech",
+        "name": "Steady tech",
+        "price_usdc_mo": 9,
+        "status": "waitlist",
+        "summary": "Lower-turnover English weights + weekly retention note.",
+        "legs_hint": [
+          "AMZN",
+          "NFLX",
+          "AMD"
+        ]
+      },
+      {
+        "id": "ai-semi",
+        "name": "AI & semiconductors",
+        "price_usdc_mo": 19,
+        "status": "waitlist",
+        "summary": "Concentrated AI/semi English package \u2014 still fail-closed on fills.",
+        "legs_hint": [
+          "NVDA-class via AMD/PLTR desk until registry expands"
+        ]
+      }
+    ],
+    "cta": "Join stock waitlist for paid packages \u2014 no charge today."
+  }
+}

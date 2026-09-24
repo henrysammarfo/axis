@@ -20,6 +20,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedProofRouteImport } from './routes/_authenticated/proof'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as DemoBasketsRouteImport } from './routes/demo.baskets'
 
 const VaultRoute = VaultRouteImport.update({
   id: '/vault',
@@ -44,6 +45,11 @@ const ManifestoRoute = ManifestoRouteImport.update({
 const AgentRoute = AgentRouteImport.update({
   id: '/agent',
   path: '/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoBasketsRoute = DemoBasketsRouteImport.update({
+  id: '/demo/baskets',
+  path: '/demo/baskets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -79,6 +85,7 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent': typeof AgentRoute
+  '/demo/baskets': typeof DemoBasketsRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent': typeof AgentRoute
+  '/demo/baskets': typeof DemoBasketsRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/agent': typeof AgentRoute
+  '/demo/baskets': typeof DemoBasketsRoute
   '/manifesto': typeof ManifestoRoute
   '/merch': typeof MerchRoute
   '/onboard': typeof OnboardRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agent'
+    | '/demo/baskets'
     | '/manifesto'
     | '/merch'
     | '/onboard'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agent'
+    | '/demo/baskets'
     | '/manifesto'
     | '/merch'
     | '/onboard'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/agent'
+    | '/demo/baskets'
     | '/manifesto'
     | '/merch'
     | '/onboard'
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AgentRoute: typeof AgentRoute
+  DemoBasketsRoute: typeof DemoBasketsRoute
   ManifestoRoute: typeof ManifestoRoute
   MerchRoute: typeof MerchRoute
   OnboardRoute: typeof OnboardRoute
@@ -199,6 +212,13 @@ declare module '@tanstack/react-router' {
       path: '/agent'
       fullPath: '/agent'
       preLoaderRoute: typeof AgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/baskets': {
+      id: '/demo/baskets'
+      path: '/demo/baskets'
+      fullPath: '/demo/baskets'
+      preLoaderRoute: typeof DemoBasketsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -268,6 +288,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AgentRoute: AgentRoute,
+  DemoBasketsRoute: DemoBasketsRoute,
   ManifestoRoute: ManifestoRoute,
   MerchRoute: MerchRoute,
   OnboardRoute: OnboardRoute,
