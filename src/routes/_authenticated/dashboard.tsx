@@ -874,13 +874,46 @@ function Dashboard() {
                 )}
                 {(positions.length > 0 || Boolean(basketPack?.plan?.legs?.length)) &&
                   axisReport?.report?.trim() && (
-                  <div className="mt-5 border border-white/10 rounded-md p-4 max-w-prose">
-                    <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                  <div className="mt-5 border border-white/10 rounded-md p-4 max-w-prose space-y-3">
+                    <p className="text-[10px] uppercase tracking-widest text-white/50">
                       Weekly note
                     </p>
                     <p className="text-sm text-white/70 leading-relaxed whitespace-pre-line">
                       {axisReport.report.trim()}
                     </p>
+                    {Boolean(axisReport.stock_prices?.length) && (
+                      <div className="border-t border-white/10 pt-3 space-y-2">
+                        <p className="text-[10px] uppercase tracking-widest text-[color:var(--color-lime)]">
+                          After-hours / weekend vs Thursday close
+                        </p>
+                        <ul className="space-y-2">
+                          {axisReport.stock_prices!.map((row) => (
+                            <li
+                              key={row.symbol}
+                              className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-white/70"
+                            >
+                              <span className="font-medium text-white">{row.symbol}</span>
+                              <span>
+                                {row.print_label}:{" "}
+                                {row.print_price != null ? `$${row.print_price.toFixed(2)}` : "—"}
+                              </span>
+                              <span className="text-white/55">
+                                Thu close
+                                {row.thursday_date ? ` (${row.thursday_date})` : ""}:{" "}
+                                {row.thursday_close != null
+                                  ? `$${row.thursday_close.toFixed(2)}`
+                                  : "—"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        {axisReport.price_honesty && (
+                          <p className="text-[11px] leading-relaxed text-white/50">
+                            {axisReport.price_honesty}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

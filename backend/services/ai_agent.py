@@ -180,17 +180,27 @@ class AxisAgent:
         }
 
     async def generate_weekly_report(self, user_id: str) -> str:
+        pack = await self.generate_weekly_report_pack(user_id)
+        return pack.get("report") or ""
+
+    async def generate_weekly_report_pack(self, user_id: str) -> dict:
+        """English weekly note + structured dual prices (bible honesty)."""
         positions = await self.tracker.get_positions(user_id)
         history = await self.tracker.get_weekly_actions(user_id)
         user = await self.tracker.get_user(user_id)
         basket = (user.stock_basket if user else None) or {}
 
-        # Nothing to report yet — don't burn an AI call (and don't risk a reasoning
-        # model rambling). The dashboard shows its own "agent is ready" empty state.
+        empty = {
+            "report": "",
+            "stock_prices": [],
+            "price_honesty": None,
+        }
+
         if not positions and not history and not basket.get("legs"):
-            return ""
+            return empty
 
         basket_note = ""
+        symbols: list[str] = []
         if basket.get("legs"):
             legs = ", ".join(
                 f"{int(float(leg.get('weight', 0)) * 100)}% {leg.get('symbol')}"
@@ -201,6 +211,13 @@ class AxisAgent:
                 f"Saved stock basket ({net}): {legs}. "
                 f"Summary: {basket.get('english_summary', '')}"
             )
+            symbols = [str(leg.get("symbol")) for leg in basket["legs"] if leg.get("symbol")]
+
+        from services.stock_session_prices import dual_prices_for_symbols, format_dual_prices_block
+
+        dual_rows = dual_prices_for_symbols(symbols) if symbols else []
+        dual_block = format_dual_prices_block(dual_rows)
+        price_honesty = dual_rows[0].honesty if dual_rows else None
 
         holds = (user.rh_holds if user else None) or {}
         hold_status = holds.get("status") or "none"
@@ -237,13 +254,16 @@ class AxisAgent:
         )
 
         prompt = f"""Write a weekly portfolio report for this user.
-Keep it under 140 words. Use plain English. No jargon. No preamble.
+Keep it under 160 words. Use plain English. No jargon. No preamble.
 Never invent stock fills or claim mainnet RH holdings if status is planned/awaiting_faucet.
 If fragmentation notes exist, warn that same ticker is not the same instrument.
+If stock session honesty prices exist, mention BOTH the after-hours/weekend print and Thursday's close —
+never treat the weekend print alone as "the stock."
 Reply with ONLY the report, in this format:
 What earned: ...
 What changed: ...
 What AXIS did: ...
+Prices (honest): ...
 What's next: ...
 
 Current positions: {json.dumps(positions)}
@@ -251,7 +271,8 @@ Actions this week: {json.dumps(history)}
 Stock basket (Open House / RH — may be testnet plan): {basket_note or "none"}
 RH hold evidence: {hold_note}
 {frag_note or "Fragmentation: n/a"}
-{retain_note}"""
+{retain_note}
+{dual_block or "Stock session honesty: n/a"}"""
 
         provider = self.settings.ai_provider
         if provider not in ("venice", "openai"):
@@ -267,20 +288,34 @@ RH hold evidence: {hold_note}
                     if frag_note
                     else ""
                 )
-                return (
+                price_line = dual_block.replace("\n", " ") if dual_block else "n/a"
+                report = (
                     f"What earned: Crypto yield positions as shown on the dashboard.\n"
                     f"What changed: {basket_note} Hold: {hold_status} "
                     f"({len(hold_txs)} tx, {len(hold_legs)} synced legs).{frag_line}\n"
                     f"What AXIS did: Kept Set.Forget.Earn on Arbitrum; RH stock path labeled testnet; "
                     f"retention {retention.get('cadence', 'weekly')} / {retention.get('rebalance_mode', 'report_only')}.\n"
+                    f"Prices (honest): {price_line}\n"
                     f"What's next: {next_line}"
                 )
-            return "Your positions are open. Check the dashboard for live balances."
+            else:
+                report = "Your positions are open. Check the dashboard for live balances."
+            return {
+                "report": report,
+                "stock_prices": [r.to_dict() for r in dual_rows],
+                "price_honesty": price_honesty,
+            }
 
         try:
-            return await self._chat_completion(prompt, provider, max_tokens=300)
+            report = await self._chat_completion(prompt, provider, max_tokens=360)
         except Exception:
-            return "Your positions are open. Check the dashboard for live balances."
+            report = "Your positions are open. Check the dashboard for live balances."
+
+        return {
+            "report": report,
+            "stock_prices": [r.to_dict() for r in dual_rows],
+            "price_honesty": price_honesty,
+        }
 
     async def _execute_tool(self, tool_name: str, tool_input: dict, user_id: str) -> dict:
         session_user_id = self._session_user_id or user_id
