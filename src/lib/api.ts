@@ -756,7 +756,21 @@ export const axisApi = {
   status: (userId: string) => request<AgentStatus>(`/api/agent/status/${userId}`),
 
   report: (userId: string) =>
-    request<{ report: string; user_id: string }>(`/api/agent/report/${userId}`),
+    request<{
+      report: string;
+      user_id: string;
+      stock_prices?: Array<{
+        symbol: string;
+        thursday_close: number | null;
+        thursday_date: string | null;
+        print_price: number | null;
+        print_label: string;
+        print_asof: string | null;
+        source: string;
+        honesty: string;
+      }>;
+      price_honesty?: string | null;
+    }>(`/api/agent/report/${userId}`),
 
   history: (userId: string) =>
     request<{ actions: ActionEntry[] }>(`/api/portfolio/history/${userId}`),

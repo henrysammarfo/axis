@@ -17,10 +17,12 @@ DEFAULT_POLICY: dict[str, Any] = {
     "include_arb_yield": True,
     "include_stock_legs": True,
     "include_fragmentation_warnings": True,
+    "include_dual_session_prices": True,
     "rebalance_mode": "report_only",  # report_only | suggest — never silent execute stocks
     "honesty": (
         "Retention is English reporting + policy suggestions. Stock fills stay fail-closed "
-        "via Activate hold / RH testnet path only."
+        "via Activate hold / RH testnet path only. Weekly notes show after-hours/weekend print "
+        "next to Thursday close — weekend RH volume is not the stock."
     ),
 }
 
@@ -85,6 +87,7 @@ def retention_status(
         },
         "actions_this_cycle": [
             "English weekly note with Arb yield + stock legs",
+            "After-hours/weekend print next to Thursday close",
             "Fragmentation warnings when comparing issuers",
             "Suggest rebalance only — never silent RH fills",
         ],

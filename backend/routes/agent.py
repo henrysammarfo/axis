@@ -1542,8 +1542,13 @@ async def get_weekly_report(
     defi = DeFiExecutor("")
     x402 = X402Client("", db)
     agent = AxisAgent(defi, x402, tracker)
-    report = await agent.generate_weekly_report(user_id)
-    return {"report": report, "user_id": user_id}
+    pack = await agent.generate_weekly_report_pack(user_id)
+    return {
+        "report": pack.get("report") or "",
+        "user_id": user_id,
+        "stock_prices": pack.get("stock_prices") or [],
+        "price_honesty": pack.get("price_honesty"),
+    }
 
 
 @router.get("/status/{user_id}")
